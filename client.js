@@ -1,614 +1,687 @@
+// ============================================================
+//  REACTION DUEL — client.js (Hybrid Authoritative)
+//  Prinsip: Client = Display + Input Only
+//  Server = Logic + Scoring + Validation
+// ============================================================
+
 const SERVER_URL = "wss://project-game-production-ea26.up.railway.app";
 let socket;
 
+// ── AppState: HANYA menyimpan data UI, BUKAN skor/game logic ──
 let AppState = {
-    user: null, 
-    isLoggedIn: false,
-    isGuest: false,
-    isGameActive: false,
-    currentRound: 1,
-    maxRounds: 5,
-    reactionTimes: [],
-    currentScore: 0,
-    combo: 0,
-    roundResults: [],
-    gameIntervals: []
+    user:        null,
+    isLoggedIn:  false,
+    isGuest:     false,
+
+    // Game state (diisi dari server, bukan dihitung client)
+    isGameActive:    false,
+    currentRound:    1,
+    myScore:         0,   // ← dari server, bukan dihitung client
+    opponentScore:   0,   // ← dari server
+    myCombo:         0,   // ← dari server
+    myAvgReaction:   '---',
+    myBestReaction:  '---',
+
+    // Tracking waktu klik lokal (HANYA untuk feedback visual instan)
+    // Bukan untuk scoring!
+    roundStartTime:  0,
+
+    // Menyimpan DOM element item yang sedang di layar
+    // key = itemId (dari server), value = element
+    activeItemEls: {}
 };
 
-const els = {};
-
-// --- SISTEM XP & LEVEL ---
-const XP_REWARDS = { WIN: 500, LOSE: 100 };
-const LEVEL_TABLE = [
-    [1, 0], [2, 200], [3, 600], [4, 1100], [5, 1700],
-    [6, 2500], [7, 3500], [8, 4700], [9, 6200], [10, 8000],
-    [11, 10100], [12, 12500], [13, 15200], [14, 18200], [15, 21500],
-    [16, 25100], [17, 29000], [18, 33200], [19, 37700], [20, 45000]
+// ── XP & Level System (tetap di client untuk UI) ──
+const XP_REWARDS   = { WIN: 500, LOSE: 100 };
+const LEVEL_TABLE  = [
+    [1,0],[2,200],[3,600],[4,1100],[5,1700],[6,2500],[7,3500],
+    [8,4700],[9,6200],[10,8000],[11,10100],[12,12500],[13,15200],
+    [14,18200],[15,21500],[16,25100],[17,29000],[18,33200],[19,37700],[20,45000]
 ];
 const ICON_UNLOCKS = {
-    1: { icon: 'fa-user', name: 'Recruit' },
-    2: { icon: 'fa-robot', name: 'Bot Fighter' },
-    4: { icon: 'fa-cat', name: 'Swift Cat' },
-    6: { icon: 'fa-dragon', name: 'Dragonborn' },
-    8: { icon: 'fa-skull', name: 'Reaper' },
-    10: { icon: 'fa-hat-wizard', name: 'Wizard' },
-    15: { icon: 'fa-fire', name: 'Inferno' },
-    20: { icon: 'fa-crown', name: 'Legend' }
+    1:{icon:'fa-user',name:'Recruit'}, 2:{icon:'fa-robot',name:'Bot Fighter'},
+    4:{icon:'fa-cat',name:'Swift Cat'}, 6:{icon:'fa-dragon',name:'Dragonborn'},
+    8:{icon:'fa-skull',name:'Reaper'}, 10:{icon:'fa-hat-wizard',name:'Wizard'},
+    15:{icon:'fa-fire',name:'Inferno'}, 20:{icon:'fa-crown',name:'Legend'}
 };
 
 function getLevelData(totalXP) {
-    let currentLevel = 1; let nextXP = 0; let currentLevelXP = 0;
-    for (let i = 0; i < LEVEL_TABLE.length; i++) {
+    let currentLevel=1, nextXP=0, currentLevelXP=0;
+    for (let i=0; i<LEVEL_TABLE.length; i++) {
         if (totalXP >= LEVEL_TABLE[i][1]) {
-            currentLevel = LEVEL_TABLE[i][0]; currentLevelXP = LEVEL_TABLE[i][1];
-            nextXP = (i + 1 < LEVEL_TABLE.length) ? LEVEL_TABLE[i+1][1] : LEVEL_TABLE[i][1];
+            currentLevel=LEVEL_TABLE[i][0]; currentLevelXP=LEVEL_TABLE[i][1];
+            nextXP = (i+1<LEVEL_TABLE.length) ? LEVEL_TABLE[i+1][1] : LEVEL_TABLE[i][1];
         } else break;
     }
-    let progressXP = totalXP - currentLevelXP;
-    let neededXP = nextXP - currentLevelXP;
-    if (neededXP <= 0) neededXP = 1;
-    return {
-        level: currentLevel, currentXP: totalXP, levelXP: currentLevelXP,
-        nextXP: nextXP, progressXP: progressXP, neededXP: neededXP,
-        progressPercent: (progressXP / neededXP) * 100
-    };
+    const progressXP = totalXP - currentLevelXP;
+    const neededXP   = Math.max(1, nextXP - currentLevelXP);
+    return { level:currentLevel, currentXP:totalXP, progressXP, neededXP,
+             progressPercent:(progressXP/neededXP)*100 };
 }
 
+// ── DOM Elements ──────────────────────────────────────────────
+const els = {};
 function initDOM() {
-    if(document.getElementById('login-screen')) {
-        els.login = document.getElementById('login-screen');
-        els.lobby = document.getElementById('lobby-screen');
-        els.game = document.getElementById('game-screen');
-        els.idInput = document.getElementById('login-id');
-        els.passInput = document.getElementById('login-pass');
-        els.loginError = document.getElementById('login-error');
-        els.btnLogin = document.getElementById('btn-login');
-        els.btnRegister = document.getElementById('btn-register');
-        els.btnGuest = document.getElementById('btn-guest');
-        els.displayUser = document.getElementById('display-username');
-        els.displayLvl = document.getElementById('display-level');
-        els.xpBarContainer = document.getElementById('xp-bar-container');
-        els.xpFill = document.getElementById('xp-fill');
-        els.avatar = document.getElementById('avatar-display');
-        els.playerList = document.getElementById('player-list-container');
-        els.startBtn = document.getElementById('start-btn');
-        els.lobbyStatus = document.getElementById('lobby-status');
-        els.chatBox = document.getElementById('chat-box');
-        els.chatInput = document.getElementById('chat-input');
-        els.serverStatus = document.getElementById('server-status');
-        els.roundInd = document.getElementById('round-indicator');
-        els.modeInd = document.getElementById('mode-indicator');
-        els.gameArea = document.getElementById('game-area');
-        els.trashContainer = document.getElementById('trash-container');
-        els.msgMain = document.getElementById('center-msg-main');
-        els.msgSub = document.getElementById('center-msg-sub');
-        els.statAvg = document.getElementById('stat-avg');
-        els.statBest = document.getElementById('stat-best');
-        els.statScore = document.getElementById('stat-score');
-        els.comboDisplay = document.getElementById('combo-display');
-        els.comboVal = document.getElementById('combo-val');
-        els.readyRoom = document.getElementById('ready-room');
-        els.btnReadyConfirm = document.getElementById('btn-ready-confirm');
-        els.opponentName = document.getElementById('opponent-name');
-        els.readyStatusMe = document.getElementById('ready-status-me');
-        els.readyTextMe = document.getElementById('ready-text-me');
-        els.readyStatusOpp = document.getElementById('ready-status-opp');
-        els.readyTextOpp = document.getElementById('ready-text-opp');
-        els.resModal = document.getElementById('result-modal');
-        els.resScore = document.getElementById('res-score');
-        els.resAvg = document.getElementById('res-avg');
-        els.resBest = document.getElementById('res-best');
-        els.resMode = document.getElementById('res-mode');
-        els.resXP = document.getElementById('res-xp');
-        els.profileModal = document.getElementById('profile-modal');
-        els.iconGrid = document.getElementById('icon-grid');
-        els.profileLevel = document.getElementById('profile-level');
-        els.profileNextUnlock = document.getElementById('profile-next-unlock');
-    }
-    if(document.getElementById('sum-sessions')) {
-        els.sumSessions = document.getElementById('sum-sessions');
-        els.sumAvg = document.getElementById('sum-avg');
-        els.sumBest = document.getElementById('sum-best');
-        els.histList = document.getElementById('history-list');
-        els.chartTrend = document.getElementById('chart-trend');
-    }
+    if (!document.getElementById('login-screen')) return;
+    const ids = [
+        'login-screen','lobby-screen','game-screen',
+        'login-id','login-pass','login-error',
+        'btn-login','btn-register','btn-guest',
+        'display-username','display-level','xp-bar-container','xp-fill','avatar-display',
+        'player-list-container','start-btn','lobby-status',
+        'chat-box','chat-input','server-status',
+        'round-indicator','mode-indicator','game-area','trash-container',
+        'center-msg-main','center-msg-sub',
+        'stat-avg','stat-best','stat-score',
+        'combo-display','combo-val',
+        'ready-room','btn-ready-confirm','opponent-name',
+        'ready-status-me','ready-text-me','ready-status-opp','ready-text-opp',
+        'result-modal','res-score','res-avg','res-best','res-mode','res-xp',
+        'profile-modal','icon-grid','profile-level','profile-next-unlock'
+    ];
+    const keyMap = {
+        'login-screen':'login','lobby-screen':'lobby','game-screen':'game',
+        'login-id':'idInput','login-pass':'passInput','login-error':'loginError',
+        'btn-login':'btnLogin','btn-register':'btnRegister','btn-guest':'btnGuest',
+        'display-username':'displayUser','display-level':'displayLvl',
+        'xp-bar-container':'xpBarContainer','xp-fill':'xpFill','avatar-display':'avatar',
+        'player-list-container':'playerList','start-btn':'startBtn','lobby-status':'lobbyStatus',
+        'chat-box':'chatBox','chat-input':'chatInput','server-status':'serverStatus',
+        'round-indicator':'roundInd','mode-indicator':'modeInd',
+        'game-area':'gameArea','trash-container':'trashContainer',
+        'center-msg-main':'msgMain','center-msg-sub':'msgSub',
+        'stat-avg':'statAvg','stat-best':'statBest','stat-score':'statScore',
+        'combo-display':'comboDisplay','combo-val':'comboVal',
+        'ready-room':'readyRoom','btn-ready-confirm':'btnReadyConfirm',
+        'opponent-name':'opponentName','ready-status-me':'readyStatusMe',
+        'ready-text-me':'readyTextMe','ready-status-opp':'readyStatusOpp',
+        'ready-text-opp':'readyTextOpp','result-modal':'resModal',
+        'res-score':'resScore','res-avg':'resAvg','res-best':'resBest',
+        'res-mode':'resMode','res-xp':'resXP','profile-modal':'profileModal',
+        'icon-grid':'iconGrid','profile-level':'profileLevel',
+        'profile-next-unlock':'profileNextUnlock'
+    };
+    ids.forEach(id => {
+        const key = keyMap[id] || id;
+        els[key] = document.getElementById(id);
+    });
 }
 
 function showScreen(name) {
-    if(!els[name]) return;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    els[name].classList.add('active');
+    if (els[name]) els[name].classList.add('active');
 }
 
-// --- MANAJEMEN DATA ---
-function getLocalStorageUsers() { return JSON.parse(localStorage.getItem('rduel_users') || '{}'); }
-function saveLocalStorageUsers(data) { localStorage.setItem('rduel_users', JSON.stringify(data)); }
-function getCurrentUser() { return JSON.parse(sessionStorage.getItem('rduel_current') || 'null'); }
-function saveCurrentUser(user) { sessionStorage.setItem('rduel_current', JSON.stringify(user)); }
-function clearCurrentUser() { sessionStorage.removeItem('rduel_current'); }
-
-function findUser(identifier) {
-    const users = getLocalStorageUsers();
-    if (users[identifier]) return users[identifier];
-    const foundKey = Object.keys(users).find(key => users[key].email === identifier);
-    return foundKey ? users[foundKey] : null;
-}
-
-function updateUserInDB(user) {
-    if (!user || user.type === 'guest') return; 
-    const users = getLocalStorageUsers();
-    const key = Object.keys(users).find(k => users[k].username === user.username) || user.username;
-    users[key] = user;
-    saveLocalStorageUsers(users);
-}
-
+// ============================================================
+//  AUTH — Gunakan WebSocket ke server, HAPUS localStorage
+// ============================================================
 const Auth = {
     login: () => {
-        const id = els.idInput.value.trim();
-        const pass = els.passInput.value;
-        if (!id || !pass) { els.loginError.textContent = "Mohon isi Username/Email dan Password!"; return; }
-        const user = findUser(id);
-        if (user && user.password === pass) {
-            AppState.user = user; AppState.isGuest = false; AppState.isLoggedIn = true;
-            saveCurrentUser(AppState.user);
-            Auth.onSuccess();
-        } else { els.loginError.textContent = "Akun tidak ditemukan atau password salah."; }
+        const id   = els.idInput?.value.trim();
+        const pass = els.passInput?.value;
+        if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi username/email dan password!"; return; }
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            // Koneksi dulu, lalu login
+            Network.connect(() => Auth.sendLogin(id, pass));
+        } else {
+            Auth.sendLogin(id, pass);
+        }
+    },
+    sendLogin: (id, pass) => {
+        Network.send({ type: 'AUTH_LOGIN', identifier: id, password: pass });
+        if(els.btnLogin) { els.btnLogin.textContent = "Masuk..."; els.btnLogin.disabled = true; }
     },
     register: () => {
-        const id = els.idInput.value.trim();
-        const pass = els.passInput.value;
-        if (!id || !pass) { els.loginError.textContent = "Mohon isi semua field!"; return; }
-        const existing = findUser(id);
-        if (existing) { els.loginError.textContent = "Username atau Email sudah terdaftar!"; return; }
-        const isEmail = id.includes('@');
-        const displayUsername = isEmail ? id.split('@')[0] : id;
-        const newUser = { 
-            username: displayUsername, email: isEmail ? id : '', password: pass, 
-            level: 1, icon: 'fa-user', gamesPlayed: 0, totalXP: 0, bestTime: null 
-        };
-        const users = getLocalStorageUsers();
-        users[displayUsername] = newUser; 
-        saveLocalStorageUsers(users);
-        AppState.user = newUser; AppState.isGuest = false; AppState.isLoggedIn = true;
-        saveCurrentUser(AppState.user); 
-        Auth.onSuccess();
+        const id   = els.idInput?.value.trim();
+        const pass = els.passInput?.value;
+        if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi semua field!"; return; }
+        const isEmail    = id.includes('@');
+        const username   = isEmail ? id.split('@')[0] : id;
+        const email      = isEmail ? id : '';
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            Network.connect(() => Network.send({ type: 'AUTH_REGISTER', username, email, password: pass }));
+        } else {
+            Network.send({ type: 'AUTH_REGISTER', username, email, password: pass });
+        }
+        if(els.btnRegister) { els.btnRegister.textContent = "Daftar..."; els.btnRegister.disabled = true; }
     },
     loginGuest: () => {
-        const randomId = Math.floor(Math.random() * 10000);
-        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost' };
-        AppState.user = guestUser; AppState.isGuest = true; AppState.isLoggedIn = true;
-        saveCurrentUser(AppState.user); 
+        const randomId  = Math.floor(Math.random() * 10000);
+        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost', level: 1, totalXP: 0 };
+        AppState.user    = guestUser;
+        AppState.isGuest = true;
+        AppState.isLoggedIn = true;
+        sessionStorage.setItem('rduel_current', JSON.stringify(guestUser));
         Auth.onSuccess();
-    },
-    onSuccess: () => {
-        els.loginError.textContent = "";
-        showScreen('lobby');
-        UI.updateProfileUI();
-        UI.initIconPicker(); 
+        // Guest: koneksi WebSocket untuk chat & matchmaking
         Network.connect();
     },
+    onSuccess: () => {
+        if(els.loginError) els.loginError.textContent = '';
+        showScreen('lobby');
+        UI.updateProfileUI();
+        UI.initIconPicker();
+    },
     checkSession: () => {
-        const user = getCurrentUser();
-        if (user) {
-            AppState.user = user; AppState.isLoggedIn = true; AppState.isGuest = (user.type === 'guest');
-            showScreen('lobby');
-            UI.updateProfileUI();
-            UI.initIconPicker(); 
+        const saved = sessionStorage.getItem('rduel_current');
+        if (saved) {
+            AppState.user = JSON.parse(saved);
+            AppState.isLoggedIn = true;
+            AppState.isGuest    = (AppState.user.type === 'guest');
+            Auth.onSuccess();
             Network.connect();
-        } else { showScreen('login'); }
+        } else {
+            showScreen('login');
+        }
     },
     logout: () => {
-        clearCurrentUser(); if(socket) socket.close(); location.reload();
+        sessionStorage.removeItem('rduel_current');
+        if (socket) socket.close();
+        location.reload();
     }
 };
 
+// ============================================================
+//  NETWORK — WebSocket handler
+// ============================================================
+const Network = {
+    connect: (onOpenCallback = null) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            if (onOpenCallback) onOpenCallback();
+            return;
+        }
+        socket = new WebSocket(SERVER_URL);
+
+        socket.onopen = () => {
+            console.log("[WS] Terhubung ke server!");
+            if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
+            // Kirim JOIN ke server agar masuk player list
+            if (AppState.user) {
+                Network.send({
+                    type:    'JOIN',
+                    username: AppState.user.username,
+                    icon:    AppState.user.icon || 'fa-user',
+                    isGuest: AppState.isGuest
+                });
+            }
+            if (onOpenCallback) onOpenCallback();
+        };
+
+        socket.onmessage = (event) => {
+            try { Network.handleMessage(JSON.parse(event.data)); }
+            catch (e) { console.error("[WS] Parse error:", e); }
+        };
+
+        socket.onerror = () => {
+            if(els.serverStatus) els.serverStatus.textContent = "ERROR";
+            console.error("[WS] Koneksi error");
+        };
+
+        socket.onclose = () => {
+            if(els.serverStatus) els.serverStatus.textContent = "OFFLINE";
+            console.log("[WS] Koneksi ditutup");
+        };
+    },
+
+    send: (data) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(data));
+        } else {
+            console.warn("[WS] Tidak bisa kirim, socket belum siap:", data.type);
+        }
+    },
+
+    // ── Router pesan dari server ──────────────────────────────
+    handleMessage: (msg) => {
+        switch (msg.type) {
+
+            // Auth
+            case 'AUTH_RESULT':
+                if (msg.success) {
+                    AppState.user = msg.user;
+                    AppState.isGuest = false;
+                    AppState.isLoggedIn = true;
+                    sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
+                    Auth.onSuccess();
+                } else {
+                    if(els.loginError) els.loginError.textContent = msg.message;
+                    if(els.btnLogin)   { els.btnLogin.textContent = "LOGIN"; els.btnLogin.disabled = false; }
+                }
+                break;
+
+            case 'REGISTER_RESULT':
+                if (msg.success) {
+                    AppState.user = msg.user;
+                    AppState.isGuest = false;
+                    AppState.isLoggedIn = true;
+                    sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
+                    Auth.onSuccess();
+                } else {
+                    if(els.loginError) els.loginError.textContent = msg.message;
+                    if(els.btnRegister) { els.btnRegister.textContent = "DAFTAR"; els.btnRegister.disabled = false; }
+                }
+                break;
+
+            // Lobby
+            case 'PLAYER_LIST':
+                UI.renderPlayerList(msg.players);
+                break;
+
+            case 'CHAT_MESSAGE':
+                UI.appendChat(msg.username, msg.message, msg.time);
+                break;
+
+            // Matchmaking
+            case 'MATCH_SEARCHING':
+                if(els.lobbyStatus) els.lobbyStatus.textContent = "Mencari lawan...";
+                break;
+
+            case 'MATCH_FOUND':
+                Game.showReadyRoom(msg.opponent, msg.opponentIcon);
+                break;
+
+            case 'PLAYER_READY_UPDATE':
+                if (msg.username !== AppState.user?.username) {
+                    // Lawan sudah ready
+                    if(els.readyStatusOpp) els.readyStatusOpp.className = 'status-dot ready';
+                    if(els.readyTextOpp)   els.readyTextOpp.textContent = "READY!";
+                }
+                break;
+
+            // Game flow
+            case 'START_GAME':
+                Game.onStartGame();
+                break;
+
+            case 'ROUND_UPDATE':
+                AppState.currentRound = msg.round;
+                if(els.roundInd) els.roundInd.textContent = `MATCH ${msg.round} / 5`;
+                break;
+
+            // ── SPAWN_ITEMS: server kirim daftar item ──────────
+            case 'SPAWN_ITEMS':
+                // msg.items = [{id, type, top, left, duration, round}, ...]
+                Game.renderItems(msg.items, msg.round);
+                break;
+
+            // ── ITEM_EXPIRED: server kasih tau item sudah mati ─
+            case 'ITEM_EXPIRED':
+                // msg.itemId, msg.resetCombo
+                Game.removeItemEl(msg.itemId);
+                if (msg.resetCombo) {
+                    AppState.myCombo = 0;
+                    if(els.comboDisplay) els.comboDisplay.classList.remove('show');
+                    Game.showFeedback("MISS!", "white", false);
+                }
+                break;
+
+            // ── SCORE_UPDATE: skor resmi dari server ───────────
+            case 'SCORE_UPDATE':
+                // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
+                Game.onScoreUpdate(msg);
+                break;
+
+            // ── ROUND_RESULT: hasil akhir ronde ────────────────
+            case 'ROUND_RESULT':
+                // msg = { roundWinner, scores: {playerA, playerB} }
+                Game.onRoundResult(msg);
+                break;
+
+            // Game Over
+            case 'GAME_OVER':
+                Game.onGameOver(msg.stats);
+                break;
+
+            // Leaderboard
+            case 'leaderboard_data':
+                UI.renderLeaderboard(msg.data);
+                break;
+
+            case 'SYSTEM':
+                console.log("[SYSTEM]", msg.message);
+                if(els.lobbyStatus) els.lobbyStatus.textContent = msg.message;
+                break;
+
+            case 'ERROR':
+                console.warn("[SERVER ERROR]", msg.message);
+                if(els.loginError) els.loginError.textContent = msg.message;
+                break;
+
+            default:
+                console.log("[WS] Unhandled:", msg.type);
+        }
+    }
+};
+
+// ============================================================
+//  UI — Rendering only, NO game logic
+// ============================================================
 const UI = {
     updateProfileUI: () => {
-        if (!AppState.user || !els.displayUser) return;
-        els.displayUser.textContent = AppState.user.username;
+        if (!AppState.user) return;
+        if(els.displayUser) els.displayUser.textContent = AppState.user.username;
+        if(els.avatar)      els.avatar.innerHTML = `<i class="fas ${AppState.user.icon || 'fa-user'}"></i>`;
+
         if (AppState.isGuest) {
-            els.displayLvl.textContent = "Offline Mode";
-            els.displayLvl.style.color = "#888";
+            if(els.displayLvl) { els.displayLvl.textContent = "Guest"; els.displayLvl.style.color = "#888"; }
             if(els.xpBarContainer) els.xpBarContainer.style.display = "none";
         } else {
             if(els.xpBarContainer) els.xpBarContainer.style.display = "block";
-            const totalXP = AppState.user.totalXP || 0;
-            const data = getLevelData(totalXP);
-            let lvlHtml = `Lvl ${data.level} <span>${data.progressXP.toFixed(0)} / ${data.neededXP.toFixed(0)} XP</span>`;
-            if (data.level >= 20) lvlHtml = `Lvl ${data.level} <span>MAX</span>`;
-            els.displayLvl.innerHTML = lvlHtml;
-            els.xpFill.style.width = `${data.progressPercent}%`;
+            const d = getLevelData(AppState.user.totalXP || 0);
+            if(els.displayLvl) els.displayLvl.innerHTML = `Lvl ${d.level} <span>${d.progressXP.toFixed(0)} / ${d.neededXP.toFixed(0)} XP</span>`;
+            if(els.xpFill)     els.xpFill.style.width = `${d.progressPercent}%`;
         }
-        els.avatar.innerHTML = `<i class="fas ${AppState.user.icon}"></i>`;
     },
-    
-    triggerLevelUpAnimation: () => {
-        const lvlText = els.displayLvl;
-        lvlText.classList.add('level-up-anim');
-        setTimeout(() => lvlText.classList.remove('level-up-anim'), 600);
+
+    renderPlayerList: (players) => {
+        if (!els.playerList) return;
+        els.playerList.innerHTML = players.map(p =>
+            `<div style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center;">
+                <span><i class="fas ${p.icon||'fa-user'}" style="margin-right:8px; color:var(--accent-cyan)"></i>${p.name}</span>
+                <span style="color:var(--accent-yellow); font-size:0.85rem;">${p.isGuest ? 'Guest' : `Lv.${p.level||1}`}</span>
+             </div>`
+        ).join('');
+    },
+
+    appendChat: (username, message, time) => {
+        if (!els.chatBox) return;
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        div.innerHTML = `<strong>${username}:</strong> ${message} <span class="time">${time}</span>`;
+        els.chatBox.appendChild(div);
+        els.chatBox.scrollTop = els.chatBox.scrollHeight;
+    },
+
+    renderLeaderboard: (rows) => {
+        // Dipanggil dari dashboard atau lobby panel
+        console.log('[LB]', rows);
     },
 
     toggleProfile: () => {
-        if(els.profileModal) els.profileModal.style.display = els.profileModal.style.display === 'flex' ? 'none' : 'flex';
+        if (els.profileModal) els.profileModal.style.display =
+            els.profileModal.style.display === 'flex' ? 'none' : 'flex';
     },
+
     initIconPicker: () => {
-        if(!els.iconGrid) return;
-        if(AppState.isGuest) {
+        if (!els.iconGrid) return;
+        if (AppState.isGuest) {
             els.iconGrid.innerHTML = '<p style="color:#666; grid-column:1/-1; text-align:center;">Guest tidak punya profil.</p>';
-            els.profileLevel.textContent = "Guest";
-            els.profileNextUnlock.textContent = "Login untuk save progress.";
             return;
         }
-        const totalXP = AppState.user.totalXP || 0;
-        const currentData = getLevelData(totalXP);
-        els.profileLevel.textContent = `Level ${currentData.level} (${currentData.currentXP} XP)`;
-        const nextUnlock = Object.entries(ICON_UNLOCKS).find(([lvl, data]) => lvl > currentData.level);
-        if(nextUnlock) els.profileNextUnlock.textContent = `Next Unlock: ${nextUnlock[1].name} at Lv.${nextUnlock[0]}`;
-        else els.profileNextUnlock.textContent = "All Icons Unlocked!";
+        const d = getLevelData(AppState.user.totalXP || 0);
+        if(els.profileLevel)    els.profileLevel.textContent    = `Level ${d.level} (${d.currentXP} XP)`;
+        const next = Object.entries(ICON_UNLOCKS).find(([lvl]) => lvl > d.level);
+        if(els.profileNextUnlock) els.profileNextUnlock.textContent = next ? `Next: ${next[1].name} at Lv.${next[0]}` : 'All Unlocked!';
+
         els.iconGrid.innerHTML = '';
-        const sortedUnlocks = Object.entries(ICON_UNLOCKS).sort((a, b) => a[0] - b[0]);
-        sortedUnlocks.forEach(([lvl, data]) => {
+        Object.entries(ICON_UNLOCKS).sort((a,b)=>a[0]-b[0]).forEach(([lvl, data]) => {
             const div = document.createElement('div');
             div.className = 'icon-option';
-            const isUnlocked = currentData.level >= lvl;
-            if (isUnlocked) {
+            const unlocked = d.level >= lvl;
+            if (unlocked) {
                 div.innerHTML = `<i class="fas ${data.icon}" style="font-size:1.5rem;"></i>`;
-                div.title = `${data.name}`;
-                if (AppState.user.icon === data.icon) { div.style.background = "rgba(0, 245, 255, 0.2)"; div.style.boxShadow = "0 0 10px var(--accent-cyan)"; }
+                if (AppState.user.icon === data.icon) { div.style.background = "rgba(0,245,255,0.2)"; div.style.boxShadow = "0 0 10px var(--accent-cyan)"; }
                 div.onclick = () => {
                     AppState.user.icon = data.icon;
-                    saveCurrentUser(AppState.user);
-                    updateUserInDB(AppState.user); 
+                    sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
+                    // Kirim update icon ke server
+                    Network.send({ type: 'UPDATE_ICON', username: AppState.user.username, icon: data.icon });
                     UI.updateProfileUI();
-                    UI.initIconPicker(); 
+                    UI.initIconPicker();
                 };
             } else {
-                div.innerHTML = `<i class="fas fa-lock" style="font-size:1.2rem; color:#555;"></i><span style="position:absolute; bottom:2px; right:2px; font-size:0.6rem; color:#888;">Lv${lvl}</span>`;
                 div.style.opacity = "0.4"; div.style.cursor = "not-allowed"; div.style.position = "relative";
+                div.innerHTML = `<i class="fas fa-lock" style="font-size:1.2rem; color:#555;"></i><span style="position:absolute;bottom:2px;right:2px;font-size:0.6rem;color:#888;">Lv${lvl}</span>`;
             }
             els.iconGrid.appendChild(div);
         });
     },
-    showResultModal: () => {
-        // Cek elemen ada atau tidak
-        if(!els.resModal) { console.error("Elemen #result-modal tidak ditemukan di HTML!"); return; }
-        
-        // Update Konten
-        if(els.resMode) els.resMode.textContent = "Match Finished";
-        if(els.resScore) els.resScore.textContent = AppState.currentScore;
-        
-        const avg = AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a,b)=>a+b,0) / AppState.reactionTimes.length).toFixed(0) : '---';
-        const best = AppState.reactionTimes.length ? Math.min(...AppState.reactionTimes).toFixed(0) : '---';
-        
-        if(els.resAvg) els.resAvg.textContent = avg;
-        if(els.resBest) els.resBest.textContent = best;
-        
-        // FIX: Paksa Modal Muncul
-        els.resModal.classList.add('show');
-        els.resModal.style.display = 'flex'; // Paksa display flex
-        els.resModal.style.opacity = '1';
-        els.resModal.style.zIndex = '9999';
-        
-        console.log("Result Modal dipaksa muncul.");
-    },
-    retryGame: () => {
-        if(els.resModal) {
-            els.resModal.classList.remove('show');
-            els.resModal.style.display = 'none';
+
+    showResultModal: (stats) => {
+        if (!els.resModal) return;
+        const me = stats?.find(p => p.username === AppState.user?.username);
+        if(els.resScore) els.resScore.textContent = me?.score       ?? AppState.myScore;
+        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime     ?? AppState.myAvgReaction;
+        if(els.resBest)  els.resBest.textContent  = me?.bestTime    ?? AppState.myBestReaction;
+        if(els.resMode)  els.resMode.textContent  = "Match Finished";
+
+        // XP (dihitung berdasarkan hasil dari server)
+        if(!AppState.isGuest && me) {
+            const isWin   = stats[0]?.username === AppState.user.username;
+            const xpGained = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
+            const oldLevel  = getLevelData(AppState.user.totalXP || 0).level;
+            AppState.user.totalXP = (AppState.user.totalXP || 0) + xpGained;
+            const newLevel = getLevelData(AppState.user.totalXP).level;
+            AppState.user.level = newLevel;
+            sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
+            if(els.resXP) { els.resXP.textContent = `+${xpGained} XP`; els.resXP.style.color = isWin ? "var(--accent-green)" : "#888"; }
+            UI.updateProfileUI();
+            if (newLevel > oldLevel) {
+                if(els.msgSub) { els.msgSub.innerHTML = `LEVEL UP! Lv.${newLevel}`; els.msgSub.style.color = "var(--accent-yellow)"; }
+            }
         }
-        Game.startMatch();
-    }
-};
 
-const Network = {
-    connect: () => {
-        if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
-        setTimeout(() => {
-            Network.handlePlayerList([
-                {username: 'ProGamer99', score: 2500},
-                {username: 'Speedy', score: 1800}
-            ]);
-        }, 1000);
+        els.resModal.classList.add('show');
+        els.resModal.style.display = 'flex';
     },
-    handlePlayerList: (players) => {
-        if(!els.playerList) return;
-        els.playerList.innerHTML = players.map(p => 
-            `<div class="player-list-item" style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1)">
-                <span>${p.username}</span> <span style="color:var(--accent-yellow)">${p.score} pts</span>
-             </div>`
-        ).join('');
+
+    triggerLevelUpAnimation: () => {
+        if(els.displayLvl) { els.displayLvl.classList.add('level-up-anim'); setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600); }
     }
 };
 
+// ============================================================
+//  GAME — Display & Input only
+//  Semua scoring/logic ada di server
+// ============================================================
 const Game = {
+
+    // ── Matchmaking ──────────────────────────────────────────
     startMatch: () => {
         showScreen('game');
-        AppState.isUserReady = false; AppState.isOpponentReady = false; AppState.isGameActive = false;
-        AppState.currentRound = 1; AppState.reactionTimes = []; AppState.currentScore = 0; AppState.combo = 0;
-        els.gameArea.className = 'state-wait';
-        els.readyRoom.classList.remove('active');
-        els.roundInd.textContent = "MATCHMAKING";
-        els.modeInd.textContent = AppState.isGuest ? "GUEST MATCH" : "RANKED MATCH";
-        els.msgMain.textContent = "SEARCHING";
-        els.msgSub.textContent = "Finding an opponent...";
-        setTimeout(() => { Game.showReadyRoom(); }, 2000);
+        AppState.isGameActive   = false;
+        AppState.myScore        = 0;
+        AppState.opponentScore  = 0;
+        AppState.myCombo        = 0;
+        AppState.activeItemEls  = {};
+
+        if(els.gameArea)  els.gameArea.className = 'state-wait';
+        if(els.readyRoom) els.readyRoom.classList.remove('active');
+        if(els.roundInd)  els.roundInd.textContent = "MATCHMAKING";
+        if(els.modeInd)   els.modeInd.textContent  = AppState.isGuest ? "GUEST MATCH" : "RANKED MATCH";
+        if(els.msgMain)   els.msgMain.textContent  = "SEARCHING";
+        if(els.msgSub)    els.msgSub.textContent   = "Finding an opponent...";
+
+        // Kirim ke server — server yang cari lawan
+        Network.send({ type: 'FIND_MATCH', username: AppState.user?.username });
     },
-    showReadyRoom: () => {
-        const names = ['Shadow', 'Viper', 'Cyber', 'Neon'];
-        AppState.opponentName = names[Math.floor(Math.random() * names.length)];
-        els.opponentName.textContent = AppState.opponentName;
-        els.readyRoom.classList.add('active');
-        els.gameArea.classList.add('state-wait'); 
-        els.readyStatusMe.className = 'status-dot';
-        els.readyTextMe.textContent = "NOT READY";
-        els.readyStatusOpp.className = 'status-dot';
-        els.readyTextOpp.textContent = "WAITING...";
-        els.btnReadyConfirm.disabled = false;
-        els.btnReadyConfirm.textContent = "I AM READY";
+
+    showReadyRoom: (opponentName, opponentIcon = 'fa-robot') => {
+        if(els.opponentName)   els.opponentName.textContent   = opponentName;
+        if(els.readyRoom)      els.readyRoom.classList.add('active');
+        if(els.readyStatusMe)  els.readyStatusMe.className   = 'status-dot';
+        if(els.readyTextMe)    els.readyTextMe.textContent   = "NOT READY";
+        if(els.readyStatusOpp) els.readyStatusOpp.className  = 'status-dot';
+        if(els.readyTextOpp)   els.readyTextOpp.textContent  = "WAITING...";
+        if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = false; els.btnReadyConfirm.textContent = "I AM READY"; }
     },
+
     confirmReady: () => {
-        if(AppState.isUserReady) return;
-        AppState.isUserReady = true;
-        els.readyStatusMe.className = 'status-dot waiting';
-        els.readyTextMe.textContent = "WAITING OPPONENT...";
-        els.btnReadyConfirm.disabled = true;
-        els.btnReadyConfirm.textContent = "READY";
-        setTimeout(() => {
-            AppState.isOpponentReady = true;
-            els.readyStatusOpp.className = 'status-dot waiting';
-            els.readyTextOpp.textContent = "WAITING OPPONENT...";
-            setTimeout(() => { Game.startActualGame(); }, 1000);
-        }, Math.random() * 2000 + 1000);
+        if(els.readyStatusMe)  els.readyStatusMe.className  = 'status-dot waiting';
+        if(els.readyTextMe)    els.readyTextMe.textContent  = "WAITING OPPONENT...";
+        if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = true; els.btnReadyConfirm.textContent = "READY"; }
+        // Kirim ke server
+        Network.send({ type: 'PLAYER_READY', username: AppState.user?.username });
     },
-    startActualGame: () => {
-        els.readyRoom.classList.remove('active');
+
+    onStartGame: () => {
+        if(els.readyRoom) els.readyRoom.classList.remove('active');
         AppState.isGameActive = true;
-        Game.nextRound();
+        if(els.gameArea)  els.gameArea.className  = 'state-wait';
+        if(els.msgMain)   els.msgMain.textContent = "ROUND 1";
+        if(els.msgSub)    els.msgSub.textContent  = "Get Ready...";
     },
-    nextRound: () => {
-        if (AppState.currentRound > AppState.maxRounds) { Game.endGame(); return; }
-        els.comboDisplay.classList.remove('show');
-        Game.setStateWait(`ROUND ${AppState.currentRound}`, "Get Ready...");
-        els.roundInd.textContent = `MATCH ${AppState.currentRound} / 5`;
-        const delay = Math.random() * 2000 + 1000;
-        setTimeout(() => { Game.spawnTrash(); }, delay);
-    },
-    setStateWait: (mainTxt = "WAIT", subTxt = "") => {
-        AppState.isGameActive = false;
-        els.gameArea.className = 'state-wait';
-        els.msgMain.textContent = mainTxt; els.msgSub.textContent = subTxt;
-        els.trashContainer.innerHTML = '';
-        AppState.gameIntervals.forEach(clearInterval);
-        AppState.gameIntervals = [];
-    },
-    spawnTrash: () => {
+
+    // ── RENDER ITEMS dari server ──────────────────────────────
+    // Tidak ada random di sini! Semua data dari server
+    renderItems: (items, round) => {
+        if (!els.trashContainer) return;
         AppState.isGameActive = true;
+        AppState.roundStartTime = performance.now();
         els.gameArea.className = 'state-go';
-        els.msgMain.textContent = ""; els.msgSub.textContent = "";
+        if(els.msgMain) els.msgMain.textContent = '';
+        if(els.msgSub)  els.msgSub.textContent  = '';
         els.trashContainer.innerHTML = '';
-        AppState.gameStartTimestamp = performance.now();
-        let itemCount = 5 + ((AppState.currentRound - 1) * 2); if(itemCount > 15) itemCount = 15; 
-        let duration = 3200 - ((AppState.currentRound - 1) * 450); if(duration < 1300) duration = 1300;
-        let bombChance = 0.20 + (AppState.currentRound * 0.05);
-        for(let i=0; i<itemCount; i++) {
-            const typeRand = Math.random();
-            let type = 'good'; let itemDuration = duration + (Math.random() * 400 - 200);
-            if(typeRand < bombChance) { type = 'bad'; itemDuration += 500; }
-            else if(typeRand > 0.85) { type = 'bonus'; itemDuration = 1200; }
-            const top = Math.random() * 60 + 15; const left = Math.random() * 70 + 10;
-            Game.createItem(type, top, left, itemDuration, AppState.currentRound);
-        }
+        AppState.activeItemEls = {};
+
+        items.forEach(item => {
+            Game.createItemEl(item, round);
+        });
     },
-    createItem: (type, top, left, duration, round) => {
+
+    createItemEl: (item, round) => {
+        // item = { id, type, top, left, duration }
         const el = document.createElement('div');
-        el.className = `trash-item ${type}`;
-        el.style.top = top + '%'; el.style.left = left + '%';
-        let iconClass = 'fa-recycle icon-good'; let color = 'var(--accent-green)';
-        if(type === 'bad') { iconClass = 'fa-bomb icon-bad'; color = 'var(--accent-red)'; }
-        if(type === 'bonus') { iconClass = 'fa-gem icon-bonus'; color = 'var(--accent-yellow)'; }
+        el.className = `trash-item ${item.type}`;
+        el.style.top  = item.top  + '%';
+        el.style.left = item.left + '%';
+
+        let iconClass = 'fa-recycle icon-good';
+        let color     = 'var(--accent-green)';
+        if (item.type === 'bad')   { iconClass = 'fa-bomb icon-bad';  color = 'var(--accent-red)'; }
+        if (item.type === 'bonus') { iconClass = 'fa-gem icon-bonus'; color = 'var(--accent-yellow)'; }
+
         el.innerHTML = `<i class="fas ${iconClass}"></i><div class="trash-timer"><div class="timer-fill" style="color:${color}"></div></div>`;
+
+        // Animasi gerak (visual only, tidak mempengaruhi logic)
         if (round >= 3) {
-            const speedFactor = (round - 2) * 0.5;
-            const moveX = (Math.random() - 0.5) * 80 * speedFactor;
-            const moveY = (Math.random() - 0.5) * 40 * speedFactor;
-            el.style.setProperty('--dx', `${moveX}px`); el.style.setProperty('--dy', `${moveY}px`);
+            const sf = (round - 2) * 0.5;
+            el.style.setProperty('--dx', `${(Math.random()-0.5)*80*sf}px`);
+            el.style.setProperty('--dy', `${(Math.random()-0.5)*40*sf}px`);
             el.classList.add('moving');
         }
-        el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); Game.processClick(el, type); };
-        const timerFill = el.querySelector('.timer-fill'); const startTime = performance.now();
-        const interval = setInterval(() => {
-            if(!AppState.isGameActive) { clearInterval(interval); return; }
-            const elapsed = performance.now() - startTime;
-            const pct = 100 - (elapsed / duration * 100);
-            timerFill.style.transform = `scaleX(${Math.max(0, pct/100)})`;
-            if(pct <= 0) {
-                clearInterval(interval);
-                if(el.parentNode) el.parentNode.removeChild(el);
-                if(type === 'good') { Game.showFeedback("MISS!", "white", false); AppState.combo = 0; Game.updateStats(); }
-                Game.checkEndRound();
+
+        // ── CLICK HANDLER: kirim itemId ke server, jangan hitung skor ──
+        el.onpointerdown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!AppState.isGameActive) return;
+
+            // 1. Hapus item dari layar SEGERA (client-side prediction visual)
+            Game.removeItemEl(item.id);
+
+            // 2. Kirim aksi ke server — server yang validasi & hitung skor
+            Network.send({
+                type:      'ITEM_CLICKED',
+                itemId:    item.id,
+                username:  AppState.user?.username,
+                clickTime: Date.now() // timestamp untuk perhitungan latency di server
+            });
+
+            // 3. Feedback visual instan (BUKAN skor — hanya animasi)
+            const localReact = performance.now() - AppState.roundStartTime;
+            if (item.type === 'bad') {
+                Game.showFeedback("BOMB!", "var(--accent-red)", false);
+            } else if (item.type === 'bonus') {
+                Game.showFeedback("BONUS!", "var(--accent-yellow)", true);
+            } else {
+                Game.showFeedback(`${Math.floor(localReact)}<span class='unit-ms'>ms</span>`, "var(--accent-green)", true);
             }
+        };
+
+        // Timer visual (hanya animasi bar — tidak berhubungan dengan expiry server)
+        const timerFill = el.querySelector('.timer-fill');
+        const startTime = performance.now();
+        const interval = setInterval(() => {
+            const pct = 100 - ((performance.now() - startTime) / item.duration * 100);
+            if (timerFill) timerFill.style.transform = `scaleX(${Math.max(0, pct/100)})`;
+            if (pct <= 0) clearInterval(interval);
         }, 16);
-        AppState.gameIntervals.push(interval);
+
+        AppState.activeItemEls[item.id] = el;
         els.trashContainer.appendChild(el);
     },
-    processClick: (el, type) => {
-        if(!AppState.isGameActive) return;
-        const reactionTime = performance.now() - AppState.gameStartTimestamp;
-        AppState.reactionTimes.push(reactionTime);
-        if(el.parentNode) el.parentNode.removeChild(el);
-        if(type === 'bad') {
-            Game.showFeedback("BOMB!", "var(--accent-red)", false);
-            AppState.currentScore -= 50; AppState.combo = 0;
-        } else if (type === 'bonus') {
-            Game.showFeedback(`+250!`, "var(--accent-yellow)", true);
-            AppState.currentScore += 250; AppState.combo++;
+
+    removeItemEl: (itemId) => {
+        const el = AppState.activeItemEls[itemId];
+        if (el && el.parentNode) {
+            el.parentNode.removeChild(el);
+        }
+        delete AppState.activeItemEls[itemId];
+    },
+
+    // ── Terima skor resmi dari server ────────────────────────
+    onScoreUpdate: (msg) => {
+        // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
+        AppState.myScore       = msg.myScore       ?? AppState.myScore;
+        AppState.opponentScore = msg.opponentScore ?? AppState.opponentScore;
+        AppState.myCombo       = msg.myCombo       ?? AppState.myCombo;
+        if (msg.myAvgReaction)  AppState.myAvgReaction  = msg.myAvgReaction;
+        if (msg.myBestReaction) AppState.myBestReaction = msg.myBestReaction;
+
+        // Update UI
+        if(els.statScore) els.statScore.textContent = AppState.myScore;
+        if(els.statAvg)   els.statAvg.textContent   = AppState.myAvgReaction;
+        if(els.statBest)  els.statBest.textContent  = AppState.myBestReaction;
+        if(els.comboVal)  els.comboVal.textContent  = AppState.myCombo;
+        if (AppState.myCombo > 1) {
+            if(els.comboDisplay) els.comboDisplay.classList.add('show');
         } else {
-            const score = 100 + (Math.min(AppState.combo, 10) * 10);
-            Game.showFeedback(`${Math.floor(reactionTime)}<span class='unit-ms'>ms</span>`, "var(--accent-green)", true);
-            AppState.currentScore += score; AppState.combo++;
+            if(els.comboDisplay) els.comboDisplay.classList.remove('show');
         }
-        Game.updateStats();
-        Game.checkEndRound();
     },
-    checkEndRound: () => {
-        setTimeout(() => {
-            if (!AppState.isGameActive) return;
-            const remainingItems = document.querySelectorAll('.trash-item').length;
-            if(remainingItems === 0) { AppState.currentRound++; Game.nextRound(); }
-        }, 50);
+
+    onRoundResult: (msg) => {
+        // Tampilkan siapa yang menang ronde ini
+        if(els.msgMain) {
+            els.msgMain.textContent = msg.roundWinner === AppState.user?.username ? "ROUND WIN!" : "ROUND LOST";
+            els.msgMain.style.color = msg.roundWinner === AppState.user?.username ? "var(--accent-green)" : "var(--accent-red)";
+        }
     },
-    showFeedback: (text, color, isPositive) => {
-        els.msgSub.innerHTML = text; els.msgSub.style.color = color;
-        els.msgMain.textContent = isPositive ? "HIT!" : "OUCH!"; els.msgMain.style.color = color;
-        if(isPositive) { els.comboVal.textContent = AppState.combo; els.comboDisplay.classList.add('show'); } 
-        else { els.comboDisplay.classList.remove('show'); }
-    },
-    updateStats: () => {
-        const avg = AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a,b)=>a+b,0) / AppState.reactionTimes.length).toFixed(0) : '---';
-        const best = AppState.reactionTimes.length ? Math.min(...AppState.reactionTimes).toFixed(0) : '---';
-        els.statAvg.textContent = avg; els.statBest.textContent = best; els.statScore.textContent = AppState.currentScore;
-    },
-    endGame: () => {
+
+    onGameOver: (stats) => {
         AppState.isGameActive = false;
-        els.gameArea.className = 'state-wait';
-        els.msgMain.textContent = "FINISH";
-        
-        try {
-            if(AppState.isGuest) {
-                els.resXP.textContent = "+0 XP";
-                els.resXP.style.color = "#666";
-            } else {
-                const oldLevel = getLevelData(AppState.user.totalXP || 0).level;
-                
-                AppState.user.gamesPlayed++;
-                if(AppState.reactionTimes.length > 0) {
-                    const avg = AppState.reactionTimes.reduce((a,b)=>a+b,0) / AppState.reactionTimes.length;
-                    if(!AppState.user.bestTime || avg < AppState.user.bestTime) AppState.user.bestTime = avg;
-                }
-                
-                let isWin = AppState.currentScore > 300;
-                let xpEarned = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
-                AppState.user.totalXP = (AppState.user.totalXP || 0) + xpEarned;
-                
-                const newLevelData = getLevelData(AppState.user.totalXP);
-                AppState.user.level = newLevelData.level;
-
-                els.resXP.textContent = `+${xpEarned} XP`;
-                els.resXP.style.color = isWin ? "var(--accent-green)" : "#888"; 
-
-                if(newLevelData.level > oldLevel) {
-                    els.msgSub.innerHTML = `LEVEL UP! Lv.${newLevelData.level}`;
-                    els.msgSub.style.color = "var(--accent-yellow)";
-                    els.msgSub.style.fontSize = "1.2rem";
-                    UI.updateProfileUI();
-                    UI.triggerLevelUpAnimation();
-                } else {
-                    UI.updateProfileUI();
-                }
-
-                saveCurrentUser(AppState.user);
-                updateUserInDB(AppState.user);
-                Storage.saveSession([{
-                    username: AppState.user.username, score: AppState.currentScore,
-                    avgTime: AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a,b)=>a+b,0)/AppState.reactionTimes.length).toFixed(0) : '---',
-                    bestTime: AppState.reactionTimes.length ? Math.min(...AppState.reactionTimes).toFixed(0) : '---',
-                    xp: xpEarned
-                }], 'Ranked');
-            }
-            
-            // PENTING: Panggil showResultModal di akhir
-            UI.showResultModal();
-
-        } catch(e) {
-            console.error("Error di endGame:", e);
-            // Fallback jika error, tetap tampilkan modal
-            UI.showResultModal();
-        }
+        if(els.gameArea) els.gameArea.className = 'state-wait';
+        if(els.msgMain)  els.msgMain.textContent = "FINISH";
+        if(els.trashContainer) els.trashContainer.innerHTML = '';
+        AppState.activeItemEls = {};
+        UI.showResultModal(stats);
     },
+
+    showFeedback: (text, color, isPositive) => {
+        if(els.msgSub) { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
+        if(els.msgMain) { els.msgMain.textContent = isPositive ? "HIT!" : "OUCH!"; els.msgMain.style.color = color; }
+    },
+
     backToLobby: () => {
-        if(els.resModal) {
-            els.resModal.classList.remove('show');
-            els.resModal.style.display = 'none';
-        }
+        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
         showScreen('lobby');
-        UI.updateProfileUI(); 
+        UI.updateProfileUI();
         UI.initIconPicker();
     }
 };
 
-const Storage = {
-    saveSession: (players, mode) => {
-        const key = 'reactionDuel_sessions';
-        const sessions = JSON.parse(localStorage.getItem(key) || '[]');
-        sessions.unshift({
-            timestamp: new Date().toISOString(), players: players, mode: mode
-        });
-        if(sessions.length > 50) sessions.pop();
-        localStorage.setItem(key, JSON.stringify(sessions));
-    }
-};
-
+// ============================================================
+//  CHAT
+// ============================================================
 const Chat = {
     handleKey: (e) => {
-        if(e.key === 'Enter' && els.chatInput) {
-            const msg = els.chatInput.value.trim();
-            if(msg) {
-                const div = document.createElement('div');
-                div.className = 'chat-msg';
-                div.innerHTML = `<strong>${AppState.user.username}:</strong> ${msg}`;
-                els.chatBox.appendChild(div); els.chatBox.scrollTop = els.chatBox.scrollHeight;
-                els.chatInput.value = '';
-            }
-        }
+        if (e.key !== 'Enter' || !els.chatInput) return;
+        const msg = els.chatInput.value.trim();
+        if (!msg) return;
+        // Kirim ke server — server yang broadcast ke semua
+        Network.send({ type: 'CHAT', username: AppState.user?.username, message: msg });
+        els.chatInput.value = '';
     }
 };
 
+// ============================================================
+//  INIT
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
     initDOM();
-    if(els.btnLogin) els.btnLogin.onclick = Auth.login;
+    if(els.btnLogin)    els.btnLogin.onclick    = Auth.login;
     if(els.btnRegister) els.btnRegister.onclick = Auth.register;
-    if(els.btnGuest) els.btnGuest.onclick = Auth.loginGuest;
-    if(document.getElementById('sum-sessions')) Dashboard.init();
-    else if (document.getElementById('login-screen')) Auth.checkSession();
+    if(els.btnGuest)    els.btnGuest.onclick    = Auth.loginGuest;
+    Auth.checkSession();
 });
-
-const Dashboard = {
-    init: () => {
-        const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
-        els.sumSessions.textContent = sessions.length;
-        const allTimes = sessions.flatMap(s => s.players.map(p => parseFloat(p.avgTime))).filter(Boolean);
-        if(allTimes.length > 0) {
-            els.sumAvg.innerHTML = (allTimes.reduce((a,b)=>a+b,0)/allTimes.length).toFixed(0) + "<span class='unit' style='font-size:0.5em'> ms</span>";
-            els.sumBest.innerHTML = Math.min(...allTimes).toFixed(0) + "<span class='unit' style='font-size:0.5em'> ms</span>";
-        }
-        if(els.histList) {
-            els.histList.innerHTML = sessions.slice(0, 10).map(s => {
-                const winner = s.players.sort((a,b) => b.score - a.score)[0];
-                return `
-                <div class="history-item">
-                    <div>
-                        <div style="font-size:0.8rem; color:rgba(255,255,255,0.5);">${new Date(s.timestamp).toLocaleString('id-ID')}</div>
-                        <div style="margin-top:5px; font-size:0.9rem;">XP: <span style="color:var(--accent-green)">${s.players[0].xp || 0}</span></div>
-                    </div>
-                    <div class="history-stats">
-                        <div>Skor: <span>${winner.score}</span></div>
-                        <div class="winner-tag">${winner.username}</div>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-        if(window.Chart && els.chartTrend) {
-            new Chart(els.chartTrend.getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: sessions.slice(0,10).reverse().map((_,i)=>i+1),
-                    datasets: [{
-                        label: 'Avg Time (ms)', data: sessions.slice(0,10).reverse().map(s => s.players[0]?.avgTime || 0),
-                        borderColor: '#00f5ff', tension: 0.4
-                    }]
-                },
-                options: { plugins: { legend: {display:false} }, scales: { y: {beginAtZero:false} } }
-            });
-        }
-    }
-};
