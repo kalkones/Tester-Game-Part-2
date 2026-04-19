@@ -14,13 +14,7 @@ let AppState = {
     myCombo:         0,   // ← dari server
     myAvgReaction:   '---',
     myBestReaction:  '---',
-
-    // Tracking waktu klik lokal (HANYA untuk feedback visual instan)
-    // Bukan untuk scoring!
     roundStartTime:  0,
-
-    // Menyimpan DOM element item yang sedang di layar
-    // key = itemId (dari server), value = element
     activeItemEls: {}
 };
 
