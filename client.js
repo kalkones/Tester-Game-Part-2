@@ -1,13 +1,6 @@
-// ============================================================
-//  REACTION DUEL — client.js (Hybrid Authoritative)
-//  Prinsip: Client = Display + Input Only
-//  Server = Logic + Scoring + Validation
-// ============================================================
-
 const SERVER_URL = "wss://tester-game-part-2-production.up.railway.app";
 let socket;
 
-// ── AppState: HANYA menyimpan data UI, BUKAN skor/game logic ──
 let AppState = {
     user:        null,
     isLoggedIn:  false,
