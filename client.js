@@ -4,7 +4,7 @@
 //  Server = Logic + Scoring + Validation
 // ============================================================
 
-const SERVER_URL = "wss://project-game-production-ea26.up.railway.app";
+const SERVER_URL = "wss://tester-game-part-2-production.up.railway.app";
 let socket;
 
 // ── AppState: HANYA menyimpan data UI, BUKAN skor/game logic ──
