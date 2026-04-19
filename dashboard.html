@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Reaction Duel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg:          #08080e;
+            --bg-card:     rgba(14,14,26,.9);
+            --bg-card2:    rgba(20,20,36,.8);
+            --border:      rgba(0,245,255,.15);
+            --cyan:        #00f5ff;
+            --pink:        #ff2d75;
+            --green:       #00ff88;
+            --yellow:      #ffe600;
+            --orange:      #ff8c00;
+            --text-muted:  rgba(255,255,255,.45);
+        }
+
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Dot grid background ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background-image: radial-gradient(rgba(0,245,255,.07) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+        }
+
+        /* ── Layout ── */
+        .container {
+            position: relative; z-index: 1;
+            max-width: 1100px; margin: 0 auto;
+            padding: 32px 20px 60px;
+        }
+
+        /* ── Header ── */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 36px; flex-wrap: wrap; gap: 12px;
+        }
+        .header-left h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: clamp(1.2rem, 4vw, 1.8rem);
+            font-weight: 900; letter-spacing: 4px;
+            color: var(--cyan);
+            text-shadow: 0 0 20px rgba(0,245,255,.4);
+        }
+        .header-left p {
+            font-size: .85rem; color: var(--text-muted);
+            letter-spacing: 2px; margin-top: 4px;
+        }
+        .back-btn {
+            padding: 10px 20px;
+            font-family: 'Orbitron', monospace; font-size: .75rem;
+            letter-spacing: 2px; text-decoration: none;
+            background: rgba(255,45,117,.15);
+            border: 1px solid var(--pink);
+            border-radius: 8px; color: var(--pink);
+            transition: all .3s;
+        }
+        .back-btn:hover { background: rgba(255,45,117,.28); }
+
+        /* ── Section title ── */
+        .section-title {
+            font-family: 'Orbitron', monospace;
+            font-size: .8rem; letter-spacing: 3px;
+            color: var(--cyan); text-transform: uppercase;
+            margin-bottom: 14px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-title::after {
+            content: ''; flex: 1; height: 1px;
+            background: linear-gradient(90deg, rgba(0,245,255,.3), transparent);
+        }
+
+        /* ── Summary cards ── */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px; margin-bottom: 36px;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px; padding: 18px 20px;
+            backdrop-filter: blur(12px);
+            transition: border-color .3s;
+        }
+        .summary-card:hover { border-color: rgba(0,245,255,.4); }
+        .summary-card .label {
+            font-size: .72rem; color: var(--text-muted);
+            letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
+        }
+        .summary-card .value {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem; font-weight: 700;
+        }
+        .summary-card .unit {
+            font-size: .8rem; color: var(--text-muted); margin-left: 4px;
+        }
+        .summary-card.cyan  .value { color: var(--cyan); }
+        .summary-card.green .value { color: var(--green); }
+        .summary-card.pink  .value { color: var(--pink); }
+        .summary-card.yellow .value { color: var(--yellow); }
+
+        /* ── Chart grid ── */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px; margin-bottom: 36px;
+        }
+        @media (max-width: 680px) { .chart-grid { grid-template-columns: 1fr; } }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px; padding: 20px;
+            backdrop-filter: blur(12px);
+        }
+        .chart-card.wide {
+            grid-column: 1 / -1;
+        }
+        .chart-card h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: .75rem; letter-spacing: 2px;
+            color: var(--text-muted); text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .chart-wrap { position: relative; height: 220px; }
+        .chart-wrap.tall { height: 280px; }
+
+        /* ── Leaderboard table ── */
+        .table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden;
+            backdrop-filter: blur(12px);
+            margin-bottom: 36px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        thead tr {
+            background: rgba(0,245,255,.06);
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            padding: 12px 16px;
+            font-family: 'Orbitron', monospace;
+            font-size: .68rem; letter-spacing: 2px;
+            color: var(--cyan); text-transform: uppercase;
+            text-align: left; font-weight: 400;
+        }
+        td {
+            padding: 11px 16px;
+            font-size: .92rem; border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: rgba(0,245,255,.04); }
+        .rank-1 td:first-child { color: var(--yellow); font-weight: 700; }
+        .rank-2 td:first-child { color: rgba(200,200,220,.8); }
+        .rank-3 td:first-child { color: #cd7f32; }
+        .badge {
+            display: inline-block; padding: 2px 8px;
+            border-radius: 4px; font-size: .72rem;
+            font-family: 'Orbitron', monospace; letter-spacing: 1px;
+        }
+        .badge-win  { background: rgba(0,255,136,.15); color: var(--green); border: 1px solid rgba(0,255,136,.3); }
+        .badge-good { background: rgba(0,245,255,.12); color: var(--cyan);  border: 1px solid rgba(0,245,255,.25); }
+        .badge-avg  { background: rgba(255,230,0,.1);  color: var(--yellow);border: 1px solid rgba(255,230,0,.2); }
+
+        /* ── Session history ── */
+        .history-list { display: flex; flex-direction: column; gap: 10px; }
+        .history-item {
+            background: var(--bg-card2);
+            border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 18px;
+            display: flex; align-items: center;
+            justify-content: space-between; flex-wrap: wrap; gap: 8px;
+            transition: border-color .2s;
+        }
+        .history-item:hover { border-color: rgba(0,245,255,.3); }
+        .history-meta { display: flex; flex-direction: column; gap: 2px; }
+        .history-meta .session-id {
+            font-family: 'Orbitron', monospace; font-size: .75rem;
+            color: var(--cyan); letter-spacing: 1px;
+        }
+        .history-meta .session-time {
+            font-size: .8rem; color: var(--text-muted);
+        }
+        .history-stats { display: flex; gap: 18px; flex-wrap: wrap; }
+        .history-stat { text-align: center; }
+        .history-stat .hs-val {
+            font-family: 'Orbitron', monospace; font-size: 1rem;
+            color: #fff; display: block;
+        }
+        .history-stat .hs-lbl {
+            font-size: .68rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .winner-tag {
+            font-family: 'Orbitron', monospace; font-size: .72rem;
+            padding: 4px 10px; border-radius: 6px;
+            background: rgba(0,255,136,.12); color: var(--green);
+            border: 1px solid rgba(0,255,136,.25);
+        }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center; padding: 40px 20px;
+            color: var(--text-muted); font-size: .95rem;
+        }
+        .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; display: block; }
+
+        /* ── Improvement insight ── */
+        .insight-box {
+            background: linear-gradient(135deg, rgba(0,245,255,.06), rgba(0,255,136,.04));
+            border: 1px solid rgba(0,245,255,.2);
+            border-radius: 12px; padding: 18px 22px;
+            margin-bottom: 36px; display: flex; gap: 16px;
+            align-items: flex-start;
+        }
+        .insight-icon { font-size: 1.8rem; flex-shrink: 0; }
+        .insight-text h4 {
+            font-family: 'Orbitron', monospace; font-size: .8rem;
+            letter-spacing: 2px; color: var(--cyan); margin-bottom: 6px;
+        }
+        .insight-text p { font-size: .9rem; color: rgba(255,255,255,.7); line-height: 1.5; }
+        .insight-text .highlight { color: var(--green); font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <header>
+        <div class="header-left">
+            <h1>📊 DASHBOARD</h1>
+            <p>REACTION DUEL — ANALISIS PERFORMA PEMAIN</p>
+        </div>
+        <a href="index.html" class="back-btn">← MAIN GAME</a>
+    </header>
+
+    <!-- Summary Cards -->
+    <div class="section-title">Ringkasan</div>
+    <div class="summary-grid">
+        <div class="summary-card cyan">
+            <div class="label">Total Sesi</div>
+            <div class="value" id="sum-sessions">0</div>
+        </div>
+        <div class="summary-card green">
+            <div class="label">Rata-rata Reaksi</div>
+            <div class="value" id="sum-avg">---<span class="unit">ms</span></div>
+        </div>
+        <div class="summary-card pink">
+            <div class="label">Reaksi Terbaik</div>
+            <div class="value" id="sum-best">---<span class="unit">ms</span></div>
+        </div>
+        <div class="summary-card yellow">
+            <div class="label">Total Ronde</div>
+            <div class="value" id="sum-rounds">0</div>
+        </div>
+    </div>
+
+    <!-- Insight Box -->
+    <div class="insight-box" id="insight-box">
+        <div class="insight-icon">💡</div>
+        <div class="insight-text">
+            <h4>Analisis Peningkatan Skill</h4>
+            <p id="insight-text">Belum ada data permainan. Mulai bermain untuk melihat analisis peningkatan skill kamu!</p>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section-title">Grafik Performa</div>
+    <div class="chart-grid">
+        <div class="chart-card wide">
+            <h3>Tren Waktu Reaksi per Ronde (5 Ronde Terakhir per Sesi)</h3>
+            <div class="chart-wrap tall"><canvas id="chart-trend"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h3>Distribusi Reaction Time</h3>
+            <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h3>Konsistensi per Sesi</h3>
+            <div class="chart-wrap"><canvas id="chart-consistency"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="section-title">Leaderboard</div>
+    <div class="table-card" style="margin-bottom:36px">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nama Pemain</th>
+                    <th>Skor Total</th>
+                    <th>Avg Reaksi</th>
+                    <th>Best</th>
+                    <th>Konsistensi</th>
+                    <th>Grade</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Session History -->
+    <div class="section-title">Riwayat Sesi</div>
+    <div class="history-list" id="history-list">
+        <div class="empty-state">
+            <span class="icon">📋</span>
+            Belum ada sesi permainan. Data akan muncul setelah menyelesaikan 1 game.
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  DATA LAYER
+//  Saat ini menggunakan localStorage sebagai
+//  penyimpanan sementara.
+//  TODO: Ganti fetchData() dengan fetch ke
+//  endpoint PHP (db_api.php) milik Adam.
+// ══════════════════════════════════════════════
+
+const STORAGE_KEY  = 'reactionDuel_sessions';
+const WS_URL       = 'wss://project-game-production-ea26.up.railway.app';
+    
+function getSessions() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    } catch { return []; }
+}
+
+function saveSession(session) {
+    const sessions = getSessions();
+    sessions.unshift(session); // terbaru di atas
+    if (sessions.length > 50) sessions.pop(); // maksimal 50 sesi
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+}
+
+// Expose ke client.js agar bisa dipanggil saat GAME_OVER
+window.saveGameSession = function(stats, roundLog) {
+    const session = {
+        id:        'S' + Date.now(),
+        timestamp: new Date().toISOString(),
+        players:   stats,        // array dari server GAME_OVER
+        roundLog:  roundLog || [], // [{round, winner, time}]
+    };
+    saveSession(session);
+};
+
+// ══════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════
+
+const sessions = getSessions();
+
+// ── Summary ──────────────────────────────────
+function renderSummary() {
+    const allTimes = sessions.flatMap(s =>
+        s.players.flatMap(p => p.reactionLog || [])
+    ).filter(Boolean);
+
+    document.getElementById('sum-sessions').textContent = sessions.length;
+    document.getElementById('sum-rounds').textContent   =
+        sessions.reduce((a, s) => a + (s.roundLog?.length || 0), 0);
+
+    if (allTimes.length) {
+        const avg  = allTimes.reduce((a,b)=>a+b,0) / allTimes.length;
+        const best = Math.min(...allTimes);
+        document.getElementById('sum-avg').innerHTML  = avg.toFixed(0)  + '<span class="unit">ms</span>';
+        document.getElementById('sum-best').innerHTML = best.toFixed(0) + '<span class="unit">ms</span>';
+    }
+}
+
+// ── Insight ───────────────────────────────────
+function renderInsight() {
+    const el = document.getElementById('insight-text');
+    if (sessions.length < 2) return;
+
+    // Ambil avg reaksi per sesi untuk pemain yang sama
+    const myName = sessions[sessions.length-1]?.players?.[0]?.username;
+    const myAvgs = sessions
+        .map(s => s.players.find(p => p.username === myName))
+        .filter(Boolean)
+        .map(p => p.avgTime)
+        .filter(Boolean)
+        .reverse(); // urut dari lama ke baru
+
+    if (myAvgs.length < 2) return;
+
+    const first = parseFloat(myAvgs[0]);
+    const last  = parseFloat(myAvgs[myAvgs.length - 1]);
+    const delta = first - last;
+    const pct   = ((delta / first) * 100).toFixed(1);
+
+    if (delta > 0) {
+        el.innerHTML = `Reaksi kamu <span class="highlight">lebih cepat ${delta.toFixed(0)}ms (${pct}%)</span> dibanding sesi pertama! Terus latihan untuk konsistensi yang lebih baik.`;
+    } else if (delta < 0) {
+        el.innerHTML = `Reaksi kamu sedikit melambat ${Math.abs(delta).toFixed(0)}ms dibanding sesi pertama. Istirahat sebentar lalu coba lagi!`;
+    } else {
+        el.innerHTML = `Reaksi kamu sangat konsisten! Pertahankan dan coba tingkatkan lagi.`;
+    }
+}
+
+// ── Leaderboard ─────────────────────────────
+// Ambil dari server via WebSocket → data dari database (sync semua device)
+// Fallback ke localStorage jika WebSocket gagal
+function renderLeaderboard() {
+    const tbody = document.getElementById('leaderboard-body');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:rgba(255,255,255,.4)">⏳ Memuat dari server...</td></tr>';
+
+    let gotResponse = false;
+
+    try {
+        const ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'get_leaderboard' }));
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'leaderboard_data') {
+                gotResponse = true;
+                ws.close();
+
+                if (msg.data && msg.data.length > 0) {
+                    // Data dari database Railway
+                    const rows = msg.data.map(r => ({
+                        username:   r.username,
+                        totalScore: parseInt(r.score),
+                        avgTime:    r.avg_reaction_time ? parseFloat(r.avg_reaction_time).toFixed(0) : null,
+                        bestTime:   r.best_time         ? parseFloat(r.best_time).toFixed(0)         : null,
+                        consistency: null,
+                    }));
+                    _renderLeaderboardRows(rows);
+                } else {
+                    // DB kosong, fallback ke localStorage
+                    _renderLeaderboardFromLocal();
+                }
+            }
+        };
+
+        ws.onerror = () => { if (!gotResponse) _renderLeaderboardFromLocal(); };
+
+        // Timeout 5 detik jika server tidak respon
+        setTimeout(() => {
+            if (!gotResponse) {
+                ws.close();
+                _renderLeaderboardFromLocal();
+            }
+        }, 5000);
+
+    } catch(e) {
+        _renderLeaderboardFromLocal();
+    }
+}
+
+function _renderLeaderboardFromLocal() {
+    const playerMap = {};
+    sessions.forEach(s => {
+        s.players?.forEach(p => {
+            if (!playerMap[p.username]) {
+                playerMap[p.username] = { username: p.username, scores: [], times: [], bests: [] };
+            }
+            playerMap[p.username].scores.push(p.score || 0);
+            if (p.avgTime)  playerMap[p.username].times.push(parseFloat(p.avgTime));
+            if (p.bestTime) playerMap[p.username].bests.push(parseFloat(p.bestTime));
+        });
+    });
+    const rows = Object.values(playerMap).map(p => ({
+        username:    p.username,
+        totalScore:  p.scores.reduce((a,b)=>a+b,0),
+        avgTime:     p.times.length ? (p.times.reduce((a,b)=>a+b,0)/p.times.length).toFixed(0) : null,
+        bestTime:    p.bests.length ? Math.min(...p.bests).toFixed(0) : null,
+        consistency: p.times.length > 1 ? (Math.max(...p.times)-Math.min(...p.times)).toFixed(0) : null,
+    })).sort((a,b) => b.totalScore - a.totalScore);
+    _renderLeaderboardRows(rows);
+}
+
+function _renderLeaderboardRows(rows) {
+    const tbody = document.getElementById('leaderboard-body');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data</div></td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map((r, i) => {
+        const avg  = parseFloat(r.avgTime) || 999;
+        const grade = avg < 200 ? 'WIN' : avg < 300 ? 'GOOD' : 'AVG';
+        const badgeClass = grade === 'WIN' ? 'badge-win' : grade === 'GOOD' ? 'badge-good' : 'badge-avg';
+        const rankClass  = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+        return `<tr class="${rankClass}">
+            <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}</td>
+            <td>${r.username}</td>
+            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.totalScore}</td>
+            <td>${r.avgTime ? r.avgTime + ' ms' : '---'}</td>
+            <td style="color:var(--green)">${r.bestTime ? r.bestTime + ' ms' : '---'}</td>
+            <td>${r.consistency ? '±' + r.consistency + ' ms' : '---'}</td>
+            <td><span class="badge ${badgeClass}">${grade}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Session History ────────────────────────────
+function renderHistory() {
+    const el = document.getElementById('history-list');
+    if (!sessions.length) return;
+
+    el.innerHTML = sessions.slice(0, 15).map(s => {
+        const winner   = s.players?.sort((a,b)=>(b.score||0)-(a.score||0))[0];
+        const dt       = new Date(s.timestamp);
+        const timeStr  = dt.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+                       + ' ' + dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+        const rounds   = s.roundLog?.length || 0;
+        const avgAll   = s.players?.map(p=>p.avgTime).filter(Boolean).map(parseFloat);
+        const sessionAvg = avgAll?.length ? (avgAll.reduce((a,b)=>a+b,0)/avgAll.length).toFixed(0) : '---';
+
+        return `<div class="history-item">
+            <div class="history-meta">
+                <span class="session-id">${s.id}</span>
+                <span class="session-time">${timeStr}</span>
+            </div>
+            <div class="history-stats">
+                <div class="history-stat">
+                    <span class="hs-val">${rounds}</span>
+                    <span class="hs-lbl">Ronde</span>
+                </div>
+                <div class="history-stat">
+                    <span class="hs-val">${s.players?.length || 0}</span>
+                    <span class="hs-lbl">Pemain</span>
+                </div>
+                <div class="history-stat">
+                    <span class="hs-val">${sessionAvg}ms</span>
+                    <span class="hs-lbl">Avg Reaksi</span>
+                </div>
+            </div>
+            ${winner ? `<span class="winner-tag">🏆 ${winner.username}</span>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ── Charts ─────────────────────────────────────
+const chartDefaults = {
+    color: 'rgba(255,255,255,.7)',
+    font: { family: 'Rajdhani, sans-serif', size: 11 },
+};
+Chart.defaults.color = chartDefaults.color;
+Chart.defaults.font  = chartDefaults.font;
+
+function makeChartOptions(extra = {}) {
+    return {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { font: { family:'Rajdhani,sans-serif', size:11 }, boxWidth:12 } } },
+        scales: {
+            x: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
+            y: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
+        },
+        ...extra,
+    };
+}
+
+// Chart 1: Tren reaction time (5 sesi terakhir, per ronde)
+function buildTrendChart() {
+    const ctx = document.getElementById('chart-trend').getContext('2d');
+    const recent = sessions.slice(0, 5).reverse();
+
+    if (!recent.length) {
+        renderEmptyChart(ctx, 'chart-trend'); return;
+    }
+
+    const colors = ['#00f5ff','#ff2d75','#00ff88','#ffe600','#ff8c00'];
+    const datasets = recent.map((s, i) => {
+        const times = s.roundLog?.map(r => r.winner === s.players?.[0]?.username ? parseFloat(r.time) : null) || [];
+        return {
+            label: `Sesi ${i+1}`,
+            data: times.slice(0,5),
+            borderColor: colors[i],
+            backgroundColor: colors[i] + '22',
+            tension: .4, pointRadius: 5,
+            borderWidth: 2, fill: false,
+        };
+    });
+
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels: ['Ronde 1','Ronde 2','Ronde 3','Ronde 4','Ronde 5'], datasets },
+        options: {
+            ...makeChartOptions(),
+            plugins: {
+                legend: { display: true, labels:{ font:{family:'Rajdhani,sans-serif',size:11}, boxWidth:12 } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}ms` } },
+            },
+            scales: {
+                ...makeChartOptions().scales,
+                y: { ...makeChartOptions().scales.y,
+                    title: { display:true, text:'Waktu Reaksi (ms)', color:'rgba(255,255,255,.4)', font:{size:10} }
+                }
+            }
+        }
+    });
+}
+
+// Chart 2: Distribusi reaction time (bar histogram)
+function buildDistChart() {
+    const ctx = document.getElementById('chart-dist').getContext('2d');
+    const allTimes = sessions.flatMap(s =>
+        s.players?.flatMap(p => p.reactionLog || []) || []
+    ).filter(Boolean).map(Number);
+
+    if (!allTimes.length) { renderEmptyChart(ctx,'chart-dist'); return; }
+
+    // Bucket per 50ms: 100-150, 150-200, ...
+    const buckets = {};
+    allTimes.forEach(t => {
+        const bucket = Math.floor(t / 50) * 50;
+        buckets[bucket] = (buckets[bucket] || 0) + 1;
+    });
+    const sorted = Object.keys(buckets).sort((a,b)=>a-b);
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sorted.map(k => `${k}-${+k+50}ms`),
+            datasets: [{
+                label: 'Jumlah klik',
+                data: sorted.map(k => buckets[k]),
+                backgroundColor: 'rgba(0,245,255,.35)',
+                borderColor: '#00f5ff',
+                borderWidth: 1, borderRadius: 4,
+            }]
+        },
+        options: makeChartOptions({ plugins:{ legend:{ display:false } } }),
+    });
+}
+
+// Chart 3: Konsistensi per sesi (lower = better)
+function buildConsistencyChart() {
+    const ctx = document.getElementById('chart-consistency').getContext('2d');
+    const data = sessions.slice(0,10).reverse().map((s,i) => {
+        const myPlayer = s.players?.[0];
+        return { x: `S${i+1}`, y: myPlayer?.consistency ? parseFloat(myPlayer.consistency) : null };
+    }).filter(d=>d.y !== null);
+
+    if (!data.length) { renderEmptyChart(ctx,'chart-consistency'); return; }
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d=>d.x),
+            datasets: [{
+                label: 'Konsistensi (ms)',
+                data: data.map(d=>d.y),
+                backgroundColor: data.map(d =>
+                    d.y < 50 ? 'rgba(0,255,136,.4)' : d.y < 100 ? 'rgba(255,230,0,.4)' : 'rgba(255,45,117,.4)'
+                ),
+                borderColor: data.map(d =>
+                    d.y < 50 ? '#00ff88' : d.y < 100 ? '#ffe600' : '#ff2d75'
+                ),
+                borderWidth: 1, borderRadius: 4,
+            }]
+        },
+        options: {
+            ...makeChartOptions({ plugins:{ legend:{ display:false } } }),
+            scales: {
+                ...makeChartOptions().scales,
+                y: { ...makeChartOptions().scales.y,
+                    title: { display:true, text:'Selisih (ms) — lebih kecil lebih baik',
+                             color:'rgba(255,255,255,.4)', font:{size:10} }
+                }
+            }
+        }
+    });
+}
+
+function renderEmptyChart(ctx, id) {
+    ctx.canvas.parentElement.innerHTML =
+        '<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center">' +
+        '<span>Belum ada data</span></div>';
+}
+
+// ── Init ──────────────────────────────────────
+renderSummary();
+renderInsight();
+renderLeaderboard(); // async, will update when done
+renderHistory();
+buildTrendChart();
+buildDistChart();
+buildConsistencyChart();
+
+// Untuk testing: tambah data dummy jika localStorage kosong
+if (!sessions.length) {
+    document.getElementById('insight-text').textContent =
+        'Selesaikan minimal 1 game untuk melihat analisis peningkatan skill kamu!';
+}
+</script>
+</body>
+</html>
