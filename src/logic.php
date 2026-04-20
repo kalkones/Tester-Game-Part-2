@@ -147,22 +147,35 @@ class Logic implements MessageComponentInterface {
         }
         $db = getDB();
         if (!$db) { $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
-        try {
-            $stmt = $db->prepare("SELECT * FROM users WHERE username = :id1 OR email = :id2 LIMIT 1");
+      try {
+            // Perhatikan: Ada 2 parameter unik (:id_user dan :id_email)
+            $stmt = $db->prepare("SELECT * FROM users WHERE username = :id_user OR email = :id_email LIMIT 1");
+            
+            // Perhatikan: Array memiliki 2 kunci yang cocok persis dengan yang di atas
             $stmt->execute([
-                $stmt->execute([
-                ':id1' => $id, 
-                ':id2' => $id])]);
+                ':id_user'  => $id, 
+                ':id_email' => $id
+            ]);
+            
             $user = $stmt->fetch();
+
             if (!$user || !password_verify($pass, $user['password_hash'])) {
                 $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Username atau password salah.']));
                 return;
             }
+
+            echo "[AUTH]   Login berhasil: {$user['username']}\n";
             $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>true,'user'=>[
-                'username'=>$user['username'],'email'=>$user['email'],'icon'=>$user['icon'],
-                'level'=>$user['level'],'totalXP'=>$user['total_xp']??0,'gamesPlayed'=>$user['games_played'],
-                'bestTime'=>$user['best_time'],'type'=>'registered',
+                'username'=>$user['username'],
+                'email'=>$user['email'],
+                'icon'=>$user['icon'],
+                'level'=>$user['level'],
+                'totalXP'=>$user['total_xp']??0,
+                'gamesPlayed'=>$user['games_played'],
+                'bestTime'=>$user['best_time'],
+                'type'=>'registered',
             ]]));
+
         } catch (\PDOException $e) {
             echo "[DB ERR] Login: {$e->getMessage()}\n";
             $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error server.']));
