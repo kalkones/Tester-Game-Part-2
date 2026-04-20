@@ -148,8 +148,11 @@ class Logic implements MessageComponentInterface {
         $db = getDB();
         if (!$db) { $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
         try {
-            $stmt = $db->prepare("SELECT * FROM users WHERE username=:id OR email=:id LIMIT 1");
-            $stmt->execute([':id' => $id]);
+            $stmt = $db->prepare("SELECT * FROM users WHERE username = :id1 OR email = :id2 LIMIT 1");
+            $stmt->execute([
+                ':id1' => $identifier, 
+                ':id2' => $identifier
+                ]);
             $user = $stmt->fetch();
             if (!$user || !password_verify($pass, $user['password_hash'])) {
                 $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Username atau password salah.']));
