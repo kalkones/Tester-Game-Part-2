@@ -1,9 +1,8 @@
 <?php
 // ============================================================
-//  REACTION DUEL — logic.php (Authoritative Server)
-//  Prinsip: Server = Sutradara + Hakim + Kalkulasi
-//  Client hanya kirim: ITEM_CLICKED {itemId}
-//  Server yang spawn, validasi, dan hitung skor
+//  REACTION DUEL — logic.php (Room-Based, Authoritative Server)
+//  FIX: Room-based matchmaking, stale timer guards, type fixes,
+//       checkRoundEnd lock, array access fix, WAIT handler
 // ============================================================
 
 require_once __DIR__ . '/db.php';
@@ -14,14 +13,12 @@ use Ratchet\ConnectionInterface;
 class Logic implements MessageComponentInterface {
 
     // ── Konstanta game ────────────────────────────────────────
-    const MAX_PLAYERS      = 2;
-    const MAX_ROUNDS       = 5;
-    const ROUND_DELAY_MIN  = 2000;  // ms delay sebelum spawn
-    const ROUND_DELAY_MAX  = 4000;
-    const LATENCY_GRACE_MS = 200;   // toleransi latency (200ms grace period)
-    const PENALTY_SCORE    = 50;
+    const MAX_ROUNDS        = 5;
+    const ROUND_DELAY_MIN   = 2000;
+    const ROUND_DELAY_MAX   = 4000;
+    const LATENCY_GRACE_MS  = 200;
+    const PENALTY_SCORE     = 50;
 
-    // Item config per ronde
     const ITEM_CONFIG = [
         1 => ['count'=>5,  'duration'=>3200, 'bomb_chance'=>0.20, 'bonus_chance'=>0.15],
         2 => ['count'=>7,  'duration'=>2800, 'bomb_chance'=>0.22, 'bonus_chance'=>0.15],
@@ -30,55 +27,56 @@ class Logic implements MessageComponentInterface {
         5 => ['count'=>13, 'duration'=>1600, 'bomb_chance'=>0.30, 'bonus_chance'=>0.12],
     ];
 
-    // ── State ─────────────────────────────────────────────────
+    // ── State Global ──────────────────────────────────────────
     private \SplObjectStorage $clients;
 
-    private array $players = [];
     /*
+     * $players: semua pemain yang terkoneksi (untuk lobby & chat)
      * Format per player:
      * [
-     *   'conn'        => ConnectionInterface,
-     *   'username'    => string,
-     *   'icon'        => string,
-     *   'isGuest'     => bool,
-     *   'score'       => int,
-     *   'reactionLog' => float[],
-     *   'combo'       => int,
-     *   'penalties'   => int,
-     *   'isReady'     => bool,
-     *   'findingMatch'=> bool,
+     *   'conn'         => ConnectionInterface,
+     *   'username'     => string,
+     *   'icon'         => string,
+     *   'isGuest'      => bool,
+     *   'score'        => int,
+     *   'reactionLog'  => float[],
+     *   'combo'        => int,
+     *   'penalties'    => int,
+     *   'isReady'      => bool,
+     *   'findingMatch' => bool,
+     *   'roomId'       => ?string,   ← BARU: id room jika sedang bermain
      * ]
      */
+    private array $players      = [];
 
-    private bool   $gameStarted  = false;
-    private int    $currentRound = 0;
-    private array  $roundLog     = [];
-
-    // ── Active Items: dikelola server ─────────────────────────
-    // key = itemId (string), value = item data
-    private array  $activeItems  = [];
     /*
-     * Format per item:
+     * $rooms: game session per pasangan pemain
+     * Format per room:
      * [
-     *   'id'       => string,
-     *   'type'     => 'good'|'bad'|'bonus',
-     *   'top'      => float,
-     *   'left'     => float,
-     *   'duration' => int (ms),
-     *   'spawnedAt'=> float (microtime*1000),
-     *   'round'    => int,
+     *   'id'            => string,
+     *   'gameStarted'   => bool,
+     *   'currentRound'  => int,
+     *   'activeItems'   => [],
+     *   'roundLog'      => [],
+     *   'itemIdCounter' => int,
+     *   'roundEnding'   => bool,   ← lock anti double-trigger
      * ]
      */
+    private array $rooms        = [];
 
-    private int $itemIdCounter = 0;
+    // Antrian matchmaking (array username)
+    private array $waitingQueue = [];
+    private int   $roomCounter  = 0;
 
     // ── Constructor ───────────────────────────────────────────
     public function __construct() {
         $this->clients = new \SplObjectStorage();
-        echo "[SERVER] Logic siap. Max " . self::MAX_PLAYERS . " pemain.\n";
+        echo "[SERVER] Logic siap (Room-Based). Max 2 pemain per room.\n";
     }
 
-    // ── Ratchet Callbacks ─────────────────────────────────────
+    // =========================================================
+    //  RATCHET CALLBACKS
+    // =========================================================
     public function onOpen(ConnectionInterface $conn): void {
         $this->clients->attach($conn);
         echo "[OPEN]   #{$conn->resourceId}\n";
@@ -91,26 +89,15 @@ class Logic implements MessageComponentInterface {
         echo "[MSG]    #{$from->resourceId} → {$data['type']}\n";
 
         switch ($data['type']) {
-
-            // Auth
-            case 'AUTH_LOGIN':    $this->handleAuthLogin($from, $data);    break;
-            case 'AUTH_REGISTER': $this->handleAuthRegister($from, $data); break;
-
-            // Lobby
-            case 'JOIN':          $this->handleJoin($from, $data);         break;
-            case 'CHAT':          $this->handleChat($from, $data);         break;
-            case 'UPDATE_ICON':   $this->handleUpdateIcon($from, $data);   break;
-
-            // Matchmaking
-            case 'FIND_MATCH':    $this->handleFindMatch($from, $data);    break;
-            case 'PLAYER_READY':  $this->handlePlayerReady($from, $data);  break;
-
-            // ── GAME: client hanya kirim itemId ───────────────
-            case 'ITEM_CLICKED':  $this->handleItemClicked($from, $data);  break;
-
-            // Leaderboard
-            case 'get_leaderboard': $this->handleGetLeaderboard($from);    break;
-
+            case 'AUTH_LOGIN':      $this->handleAuthLogin($from, $data);    break;
+            case 'AUTH_REGISTER':   $this->handleAuthRegister($from, $data); break;
+            case 'JOIN':            $this->handleJoin($from, $data);         break;
+            case 'CHAT':            $this->handleChat($from, $data);         break;
+            case 'UPDATE_ICON':     $this->handleUpdateIcon($from, $data);   break;
+            case 'FIND_MATCH':      $this->handleFindMatch($from, $data);    break;
+            case 'PLAYER_READY':    $this->handlePlayerReady($from, $data);  break;
+            case 'ITEM_CLICKED':    $this->handleItemClicked($from, $data);  break;
+            case 'get_leaderboard': $this->handleGetLeaderboard($from);      break;
             default:
                 echo "[WARN]   Unknown type: {$data['type']}\n";
         }
@@ -119,15 +106,39 @@ class Logic implements MessageComponentInterface {
     public function onClose(ConnectionInterface $conn): void {
         $this->clients->detach($conn);
         $username = $this->getUsernameByConn($conn) ?? "#{$conn->resourceId}";
+
+        // ── Cleanup room jika pemain sedang dalam game ────────
+        $roomId = $this->getPlayerRoomId($conn);
+        if ($roomId && isset($this->rooms[$roomId])) {
+            $room = &$this->rooms[$roomId];
+            if ($room['gameStarted']) {
+                $room['gameStarted'] = false;
+                $this->broadcastRoom($roomId, [
+                    'type'    => 'SYSTEM',
+                    'message' => "{$username} disconnect. Game dibatalkan."
+                ]);
+            }
+            // Reset semua pemain dalam room ini
+            foreach ($this->players as &$p) {
+                if (($p['roomId'] ?? null) === $roomId) {
+                    $p['roomId'] = null; $p['isReady'] = false;
+                    $p['findingMatch'] = false; $p['score'] = 0;
+                    $p['combo'] = 0; $p['reactionLog'] = []; $p['penalties'] = 0;
+                }
+            }
+            unset($p);
+            unset($this->rooms[$roomId]);
+            echo "[ROOM]   {$roomId} dihapus karena disconnect.\n";
+        }
+
+        // Hapus dari antrian matchmaking
+        $this->waitingQueue = array_values(
+            array_filter($this->waitingQueue, fn($u) => $u !== $username)
+        );
+
         $this->removePlayer($conn);
         echo "[CLOSE]  {$username}\n";
-
-        if ($this->gameStarted) {
-            $this->cancelAllItemTimers();
-            $this->resetGame();
-            $this->broadcastAll(['type' => 'SYSTEM', 'message' => "{$username} keluar. Game dibatalkan."]);
-        }
-        $this->broadcastPlayerList();
+        $this->broadcastAll(['type' => 'PLAYER_LIST', 'players' => $this->getPlayerListData()]);
     }
 
     public function onError(ConnectionInterface $conn, \Exception $e): void {
@@ -146,17 +157,13 @@ class Logic implements MessageComponentInterface {
             return;
         }
         $db = getDB();
-        if (!$db) { $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
-      try {
-            // Perhatikan: Ada 2 parameter unik (:id_user dan :id_email)
+        if (!$db) {
+            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
+            return;
+        }
+        try {
             $stmt = $db->prepare("SELECT * FROM users WHERE username = :id_user OR email = :id_email LIMIT 1");
-            
-            // Perhatikan: Array memiliki 2 kunci yang cocok persis dengan yang di atas
-            $stmt->execute([
-                ':id_user'  => $id, 
-                ':id_email' => $id
-            ]);
-            
+            $stmt->execute([':id_user' => $id, ':id_email' => $id]);
             $user = $stmt->fetch();
 
             if (!$user || !password_verify($pass, $user['password_hash'])) {
@@ -166,16 +173,15 @@ class Logic implements MessageComponentInterface {
 
             echo "[AUTH]   Login berhasil: {$user['username']}\n";
             $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>true,'user'=>[
-                'username'=>$user['username'],
-                'email'=>$user['email'],
-                'icon'=>$user['icon'],
-                'level'=>$user['level'],
-                'totalXP'=>$user['total_xp']??0,
-                'gamesPlayed'=>$user['games_played'],
-                'bestTime'=>$user['best_time'],
-                'type'=>'registered',
+                'username'    => $user['username'],
+                'email'       => $user['email'],
+                'icon'        => $user['icon'],
+                'level'       => $user['level'],
+                'totalXP'     => $user['total_xp'] ?? 0,
+                'gamesPlayed' => $user['games_played'],
+                'bestTime'    => $user['best_time'],
+                'type'        => 'registered',
             ]]));
-
         } catch (\PDOException $e) {
             echo "[DB ERR] Login: {$e->getMessage()}\n";
             $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error server.']));
@@ -185,25 +191,35 @@ class Logic implements MessageComponentInterface {
     private function handleAuthRegister(ConnectionInterface $conn, array $data): void {
         $username = trim($data['username'] ?? '');
         $email    = trim($data['email']    ?? '');
-        $pass     = $data['password']       ?? '';
+        $pass     = $data['password']      ?? '';
         if (!$username || !$pass) {
             $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username & password wajib.']));
             return;
         }
         $db = getDB();
-        if (!$db) { $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
+        if (!$db) {
+            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
+            return;
+        }
         try {
             $stmt = $db->prepare("SELECT id FROM users WHERE username=:u OR (email!='' AND email=:e) LIMIT 1");
-            $stmt->execute([':u'=>$username,':e'=>$email]);
+            $stmt->execute([':u' => $username, ':e' => $email]);
             if ($stmt->fetch()) {
                 $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username/email sudah dipakai.']));
                 return;
             }
             $hash = password_hash($pass, PASSWORD_DEFAULT);
-            $db->prepare("INSERT INTO users (username,email,password_hash) VALUES (:u,:e,:p)")->execute([':u'=>$username,':e'=>$email,':p'=>$hash]);
+            $db->prepare("INSERT INTO users (username,email,password_hash) VALUES (:u,:e,:p)")
+               ->execute([':u' => $username, ':e' => $email, ':p' => $hash]);
             $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>true,'user'=>[
-                'username'=>$username,'email'=>$email,'icon'=>'fa-user',
-                'level'=>1,'totalXP'=>0,'gamesPlayed'=>0,'bestTime'=>null,'type'=>'registered',
+                'username'    => $username,
+                'email'       => $email,
+                'icon'        => 'fa-user',
+                'level'       => 1,
+                'totalXP'     => 0,
+                'gamesPlayed' => 0,
+                'bestTime'    => null,
+                'type'        => 'registered',
             ]]));
         } catch (\PDOException $e) {
             echo "[DB ERR] Register: {$e->getMessage()}\n";
@@ -228,12 +244,21 @@ class Logic implements MessageComponentInterface {
         }
 
         $this->players[] = [
-            'conn'=>$conn,'username'=>$username,'icon'=>$icon,'isGuest'=>$isGuest,
-            'score'=>0,'reactionLog'=>[],'combo'=>0,'penalties'=>0,'isReady'=>false,'findingMatch'=>false,
+            'conn'         => $conn,
+            'username'     => $username,
+            'icon'         => $icon,
+            'isGuest'      => $isGuest,
+            'score'        => 0,
+            'reactionLog'  => [],
+            'combo'        => 0,
+            'penalties'    => 0,
+            'isReady'      => false,
+            'findingMatch' => false,
+            'roomId'       => null,   // ← null = belum di room
         ];
 
         echo "[JOIN]   {$username} bergabung. Total: " . count($this->players) . "\n";
-        $this->broadcastPlayerList();
+        $this->broadcastAll(['type' => 'PLAYER_LIST', 'players' => $this->getPlayerListData()]);
         $this->sendChatHistory($conn);
     }
 
@@ -253,38 +278,99 @@ class Logic implements MessageComponentInterface {
             if ($p['username'] === $username) { $p['icon'] = $icon; break; }
         }
         unset($p);
-        // Update di DB
         $db = getDB();
         if ($db) {
-            try { $db->prepare("UPDATE users SET icon=:i WHERE username=:u")->execute([':i'=>$icon,':u'=>$username]); } catch (\PDOException $e) {}
+            try {
+                $db->prepare("UPDATE users SET icon=:i WHERE username=:u")->execute([':i'=>$icon,':u'=>$username]);
+            } catch (\PDOException $e) {}
         }
     }
 
     // =========================================================
-    //  MATCHMAKING
+    //  MATCHMAKING — Room-Based (FIX UTAMA)
     // =========================================================
     private function handleFindMatch(ConnectionInterface $conn, array $data): void {
         $username = $data['username'] ?? '?';
+
+        // Cek apakah sudah di room/game
+        $existingRoom = $this->getPlayerRoomId($conn);
+        if ($existingRoom) {
+            $conn->send($this->encode(['type'=>'SYSTEM','message'=>'Kamu sudah dalam game.']));
+            return;
+        }
+
+        // Tandai player sebagai findingMatch
         foreach ($this->players as &$p) {
             if ($p['conn'] === $conn) { $p['findingMatch'] = true; break; }
         }
         unset($p);
 
-        $searching = array_values(array_filter($this->players, fn($p) => $p['findingMatch']));
-        echo "[MATCH]  {$username} mencari. Total: " . count($searching) . "\n";
+        // Tambahkan ke antrian jika belum ada
+        if (!in_array($username, $this->waitingQueue)) {
+            $this->waitingQueue[] = $username;
+        }
 
-        if (count($searching) >= self::MAX_PLAYERS) {
-            $matched = array_slice($searching, 0, 2);
-            foreach ($this->players as &$p) { $p['findingMatch'] = false; }
+        echo "[MATCH]  {$username} masuk antrian. Queue: " . count($this->waitingQueue) . "\n";
+
+        // Jika ada >= 2 pemain menunggu, cocokkan 2 pertama
+        if (count($this->waitingQueue) >= 2) {
+            $u1 = $this->waitingQueue[0];
+            $u2 = $this->waitingQueue[1];
+            // Hapus keduanya dari antrian
+            $this->waitingQueue = array_values(array_slice($this->waitingQueue, 2));
+
+            // Cari data player
+            $p1Data = $this->findPlayer($u1);
+            $p2Data = $this->findPlayer($u2);
+
+            if (!$p1Data || !$p2Data) {
+                echo "[MATCH]  ERROR: Salah satu pemain tidak ditemukan.\n";
+                return;
+            }
+
+            // Buat room baru
+            $roomId = 'room_' . (++$this->roomCounter) . '_' . time();
+            $this->rooms[$roomId] = [
+                'id'             => $roomId,
+                'gameStarted'    => false,
+                'currentRound'   => 0,
+                'activeItems'    => [],
+                'roundLog'       => [],
+                'itemIdCounter'  => 0,
+                'roundEnding'    => false,
+            ];
+
+            // Assign roomId ke kedua pemain
+            foreach ($this->players as &$p) {
+                if ($p['username'] === $u1 || $p['username'] === $u2) {
+                    $p['findingMatch'] = false;
+                    $p['roomId']       = $roomId;
+                }
+            }
             unset($p);
 
-            foreach ($matched as $mp) {
-                $opp = array_values(array_filter($matched, fn($x) => $x['username'] !== $mp['username']))[0] ?? null;
-                $mp['conn']->send($this->encode([
-                    'type'=>'MATCH_FOUND','opponent'=>$opp?->username??'?','opponentIcon'=>$opp?->icon??'fa-robot'
-                ]));
+            // Kirim MATCH_FOUND ke masing-masing, dengan info lawan yang benar
+            // FIX BUG: akses array dengan [], bukan object dengan ->
+            foreach ($this->players as $p) {
+                if ($p['username'] === $u1) {
+                    $opp = $this->findPlayer($u2);
+                    $p['conn']->send($this->encode([
+                        'type'         => 'MATCH_FOUND',
+                        'opponent'     => $u2,
+                        'opponentIcon' => $opp['icon'] ?? 'fa-robot',
+                    ]));
+                }
+                if ($p['username'] === $u2) {
+                    $opp = $this->findPlayer($u1);
+                    $p['conn']->send($this->encode([
+                        'type'         => 'MATCH_FOUND',
+                        'opponent'     => $u1,
+                        'opponentIcon' => $opp['icon'] ?? 'fa-robot',
+                    ]));
+                }
             }
-            echo "[MATCH]  {$matched[0]['username']} vs {$matched[1]['username']}\n";
+
+            echo "[MATCH]  {$u1} vs {$u2} → Room: {$roomId}\n";
         } else {
             $conn->send($this->encode(['type'=>'MATCH_SEARCHING','message'=>'Mencari lawan...']));
         }
@@ -292,73 +378,82 @@ class Logic implements MessageComponentInterface {
 
     private function handlePlayerReady(ConnectionInterface $conn, array $data): void {
         $username = $data['username'] ?? '?';
+        $roomId   = $this->getPlayerRoomId($conn);
+
+        if (!$roomId || !isset($this->rooms[$roomId])) {
+            echo "[WARN]   PLAYER_READY dari {$username} tapi tidak ada room.\n";
+            return;
+        }
+
+        // Tandai ready
         foreach ($this->players as &$p) {
             if ($p['username'] === $username) { $p['isReady'] = true; break; }
         }
         unset($p);
 
-        $this->broadcastAll(['type'=>'PLAYER_READY_UPDATE','username'=>$username,'isReady'=>true]);
-        echo "[READY]  {$username}\n";
+        // Broadcast ke room saja (bukan semua client)
+        $this->broadcastRoom($roomId, ['type'=>'PLAYER_READY_UPDATE','username'=>$username,'isReady'=>true]);
+        echo "[READY]  {$username} @ Room {$roomId}\n";
 
-        $readyCount = count(array_filter($this->players, fn($p) => $p['isReady']));
-        if ($readyCount >= self::MAX_PLAYERS && !$this->gameStarted) {
-            $this->scheduleCall(1000, fn() => $this->startGame());
+        // Cek apakah KEDUA pemain dalam room ini sudah ready
+        $roomPlayers = $this->getRoomPlayers($roomId);
+        $readyCount  = count(array_filter($roomPlayers, fn($p) => $p['isReady']));
+
+        if ($readyCount >= 2 && !$this->rooms[$roomId]['gameStarted']) {
+            $this->scheduleCall(1000, fn() => $this->startGame($roomId));
         }
     }
 
     // =========================================================
-    //  ITEM CLICKED — The Heart of Anti-Cheat
+    //  ITEM CLICKED
     // =========================================================
     private function handleItemClicked(ConnectionInterface $from, array $data): void {
-        if (!$this->gameStarted) return;
+        $username = $data['username'] ?? '?';
+        $itemId   = $data['itemId']   ?? '';
 
-        $username  = $data['username']  ?? '?';
-        $itemId    = $data['itemId']    ?? '';
-        $clickTime = (float)($data['clickTime'] ?? 0); // timestamp dari client (ms)
+        // Cari room pemain ini
+        $roomId = $this->getPlayerRoomId($from);
+        if (!$roomId || !isset($this->rooms[$roomId])) return;
 
-        // ── Validasi 1: Apakah item ada di state server? ──────
-        if (!isset($this->activeItems[$itemId])) {
-            echo "[IGNORE] Item {$itemId} tidak ada (expired/sudah diklik)\n";
+        $room = &$this->rooms[$roomId];
+        if (!$room['gameStarted']) return;
+
+        // Validasi: item ada di room ini?
+        if (!isset($room['activeItems'][$itemId])) {
+            echo "[IGNORE] Item {$itemId} tidak ada di room {$roomId} (expired/diklik)\n";
             return;
         }
 
-        $item = $this->activeItems[$itemId];
+        $item = $room['activeItems'][$itemId];
 
-        // ── Validasi 2: Apakah item sudah expired? ────────────
+        // Validasi expired?
         $serverNowMs = round(microtime(true) * 1000, 2);
         $elapsedMs   = $serverNowMs - $item['spawnedAt'];
-        $maxAllowed  = $item['duration'] + self::LATENCY_GRACE_MS; // Grace period 200ms
+        $maxAllowed  = $item['duration'] + self::LATENCY_GRACE_MS;
 
         if ($elapsedMs > $maxAllowed) {
             echo "[LATE]   {$username} klik {$itemId} terlambat ({$elapsedMs}ms > {$maxAllowed}ms)\n";
-            // Klik ditolak karena benar-benar terlalu telat (melebihi grace period)
             return;
         }
 
-        // ── Validasi 3: Hapus item agar tidak bisa diklik 2x ──
-        unset($this->activeItems[$itemId]);
+        // Hapus item agar tidak bisa diklik 2x
+        unset($room['activeItems'][$itemId]);
 
-        // ── Kalkulasi Reaction Time (dari server, bukan client) ──
         $reactionMs = round($elapsedMs, 2);
+        echo "[CLICK]  {$username} @ Room {$roomId}: {$itemId} ({$item['type']}) @ {$reactionMs}ms\n";
 
-        echo "[CLICK]  {$username} klik {$itemId} ({$item['type']}) @ {$reactionMs}ms\n";
-
-        // ── Hitung Skor & Update State ─────────────────────────
+        // Update skor pemain
         foreach ($this->players as &$p) {
             if ($p['username'] !== $username) continue;
-
             if ($item['type'] === 'bad') {
-                // Bomb: kurangi skor, reset combo
-                $p['score']    = max(0, $p['score'] - self::PENALTY_SCORE);
-                $p['combo']    = 0;
+                $p['score'] = max(0, $p['score'] - self::PENALTY_SCORE);
+                $p['combo'] = 0;
                 $p['penalties']++;
             } elseif ($item['type'] === 'bonus') {
-                // Bonus: +250, naik combo
                 $p['score'] += 250;
                 $p['combo']++;
                 $p['reactionLog'][] = $reactionMs;
             } else {
-                // Good: skor base + combo bonus, reaction time dicatat
                 $comboBonus = min($p['combo'], 10) * 10;
                 $p['score'] += (100 + $comboBonus);
                 $p['combo']++;
@@ -368,75 +463,86 @@ class Logic implements MessageComponentInterface {
         }
         unset($p);
 
-        // ── Broadcast SCORE_UPDATE ke semua ───────────────────
-        $this->broadcastScoreUpdate();
-
-        // ── Cek apakah semua item habis → akhiri ronde ────────
-        $this->checkRoundEnd();
+        $this->broadcastScoreUpdate($roomId);
+        $this->checkRoundEnd($roomId);
     }
 
     // =========================================================
-    //  GAME FLOW
+    //  GAME FLOW — Semua fungsi terima $roomId
     // =========================================================
-    private function startGame(): void {
-        $this->gameStarted  = true;
-        $this->currentRound = 0;
-        $this->roundLog     = [];
-        $this->activeItems  = [];
-        $this->itemIdCounter = 0;
+    private function startGame(string $roomId): void {
+        if (!isset($this->rooms[$roomId])) return;
+        $room = &$this->rooms[$roomId];
 
+        $room['gameStarted']    = true;
+        $room['currentRound']   = 0;
+        $room['roundLog']       = [];
+        $room['activeItems']    = [];
+        $room['itemIdCounter']  = 0;
+        $room['roundEnding']    = false;
+
+        // Reset skor pemain dalam room
         foreach ($this->players as &$p) {
-            $p['score']='0'; $p['reactionLog']=[]; $p['combo']=0;
-            $p['penalties']=0; $p['isReady']=false;
+            if (($p['roomId'] ?? null) !== $roomId) continue;
+            $p['score'] = 0; $p['reactionLog'] = []; $p['combo'] = 0; // FIX: int 0
+            $p['penalties'] = 0; $p['isReady'] = false;
         }
         unset($p);
 
-        echo "[GAME]   Dimulai!\n";
-        $this->broadcastAll(['type' => 'START_GAME']);
-        $this->scheduleCall(1500, fn() => $this->startRound());
+        echo "[GAME]   Dimulai! Room: {$roomId}\n";
+        $this->broadcastRoom($roomId, ['type' => 'START_GAME']);
+        $this->scheduleCall(1500, fn() => $this->startRound($roomId));
     }
 
-    private function startRound(): void {
-        $this->currentRound++;
-        if ($this->currentRound > self::MAX_ROUNDS) { $this->endGame(); return; }
+    private function startRound(string $roomId): void {
+        if (!isset($this->rooms[$roomId])) return;
+        $room = &$this->rooms[$roomId];
+        if (!$room['gameStarted']) return; // FIX: guard stale timer
 
-        $this->activeItems = [];
+        $room['currentRound']++;
+        if ($room['currentRound'] > self::MAX_ROUNDS) {
+            $this->endGame($roomId);
+            return;
+        }
 
-        echo "[ROUND]  Ronde {$this->currentRound}\n";
-        $this->broadcastAll(['type'=>'ROUND_UPDATE','round'=>$this->currentRound]);
-        $this->broadcastAll(['type'=>'WAIT']);
+        $room['activeItems'] = [];
+        $room['roundEnding'] = false;
 
-        // Delay acak sebelum spawn
+        echo "[ROUND]  Room {$roomId}: Ronde {$room['currentRound']}\n";
+        $this->broadcastRoom($roomId, ['type'=>'ROUND_UPDATE','round'=>$room['currentRound']]);
+        $this->broadcastRoom($roomId, ['type'=>'WAIT']); // client: tampilkan "Get Ready"
+
         $delay = rand(self::ROUND_DELAY_MIN, self::ROUND_DELAY_MAX);
-        $this->scheduleCall($delay, fn() => $this->spawnItems());
+        $this->scheduleCall($delay, fn() => $this->spawnItems($roomId));
     }
 
-    // ── Sutradara: Server yang generate & broadcast item ──────
-    private function spawnItems(): void {
-        $round      = $this->currentRound;
-        $cfg        = self::ITEM_CONFIG[$round] ?? self::ITEM_CONFIG[5];
-        $count      = $cfg['count'];
-        $duration   = $cfg['duration'];
-        $bombChance = $cfg['bomb_chance'];
-        $bonusChance= $cfg['bonus_chance'];
+    private function spawnItems(string $roomId): void {
+        if (!isset($this->rooms[$roomId])) return;
+        $room = &$this->rooms[$roomId];
+        if (!$room['gameStarted']) return; // FIX: guard stale timer
 
-        $items = [];
+        $round       = $room['currentRound'];
+        $cfg         = self::ITEM_CONFIG[$round] ?? self::ITEM_CONFIG[5];
+        $count       = $cfg['count'];
+        $duration    = $cfg['duration'];
+        $bombChance  = $cfg['bomb_chance'];
+        $bonusChance = $cfg['bonus_chance'];
+
+        $items     = [];
         $spawnedAt = round(microtime(true) * 1000, 2);
 
         for ($i = 0; $i < $count; $i++) {
-            $this->itemIdCounter++;
-            $id   = "item_{$this->currentRound}_{$this->itemIdCounter}";
+            $room['itemIdCounter']++;
+            // Item ID mengandung roomId agar unik antar room
+            $id   = "item_{$roomId}_{$round}_{$room['itemIdCounter']}";
             $rand = mt_rand() / mt_getrandmax();
 
             if ($rand < $bombChance) {
-                $type     = 'bad';
-                $itemDur  = $duration + 500;
+                $type = 'bad'; $itemDur = $duration + 500;
             } elseif ($rand > (1 - $bonusChance)) {
-                $type     = 'bonus';
-                $itemDur  = 1200;
+                $type = 'bonus'; $itemDur = 1200;
             } else {
-                $type     = 'good';
-                $itemDur  = $duration + mt_rand(-200, 200);
+                $type = 'good'; $itemDur = $duration + mt_rand(-200, 200);
             }
 
             $itemData = [
@@ -449,10 +555,8 @@ class Logic implements MessageComponentInterface {
                 'round'     => $round,
             ];
 
-            // Simpan di state server
-            $this->activeItems[$id] = $itemData;
+            $room['activeItems'][$id] = $itemData;
 
-            // Data yang dikirim ke client (tanpa spawnedAt — itu rahasia server)
             $items[] = [
                 'id'       => $id,
                 'type'     => $type,
@@ -461,69 +565,76 @@ class Logic implements MessageComponentInterface {
                 'duration' => $itemDur,
             ];
 
-            // ── Jadwalkan expiry timer per item ──────────────
-            $this->scheduleItemExpiry($id, $itemDur);
+            $this->scheduleItemExpiry($roomId, $id, $itemDur);
         }
 
-        echo "[SPAWN]  Ronde {$round}: {$count} item\n";
-        $this->broadcastAll(['type'=>'SPAWN_ITEMS','items'=>$items,'round'=>$round]);
+        echo "[SPAWN]  Room {$roomId} Ronde {$round}: {$count} item\n";
+        $this->broadcastRoom($roomId, ['type'=>'SPAWN_ITEMS','items'=>$items,'round'=>$round]);
     }
 
-    // ── Penjaga Waktu: item kedaluwarsa di server ─────────────
-    private function scheduleItemExpiry(string $itemId, int $durationMs): void {
-        $this->scheduleCall($durationMs, function () use ($itemId) {
-            if (!isset($this->activeItems[$itemId])) return; // sudah diklik
+    private function scheduleItemExpiry(string $roomId, string $itemId, int $durationMs): void {
+        $this->scheduleCall($durationMs, function() use ($roomId, $itemId) {
+            if (!isset($this->rooms[$roomId])) return;
+            $room = &$this->rooms[$roomId];
+            if (!isset($room['activeItems'][$itemId])) return; // sudah diklik
 
-            $item = $this->activeItems[$itemId];
-            unset($this->activeItems[$itemId]);
+            $item = $room['activeItems'][$itemId];
+            unset($room['activeItems'][$itemId]);
 
-            echo "[EXPIRY] Item {$itemId} expired.\n";
+            echo "[EXPIRY] Room {$roomId} Item {$itemId} expired.\n";
 
-            // Broadcast ke FE agar hapus item dari layar
-            // Jika item 'good', reset combo semua pemain
             $resetCombo = ($item['type'] === 'good');
-            $this->broadcastAll(['type'=>'ITEM_EXPIRED','itemId'=>$itemId,'resetCombo'=>$resetCombo]);
+            $this->broadcastRoom($roomId, ['type'=>'ITEM_EXPIRED','itemId'=>$itemId,'resetCombo'=>$resetCombo]);
 
             if ($resetCombo) {
-                foreach ($this->players as &$p) { $p['combo'] = 0; }
+                foreach ($this->players as &$p) {
+                    if (($p['roomId'] ?? null) === $roomId) { $p['combo'] = 0; }
+                }
                 unset($p);
             }
 
-            $this->checkRoundEnd();
+            $this->checkRoundEnd($roomId);
         });
     }
 
-    private function checkRoundEnd(): void {
-        if (!empty($this->activeItems)) return; // masih ada item
+    private function checkRoundEnd(string $roomId): void {
+        if (!isset($this->rooms[$roomId])) return;
+        $room = &$this->rooms[$roomId];
 
-        echo "[ROUND]  Ronde {$this->currentRound} selesai.\n";
+        if (!empty($room['activeItems'])) return;   // masih ada item
+        if ($room['roundEnding']) return;            // FIX: anti double-trigger
 
-        // Broadcast hasil ronde
+        $room['roundEnding'] = true;
+
+        echo "[ROUND]  Room {$roomId}: Ronde {$room['currentRound']} selesai.\n";
+
+        // Hitung skor
         $scores = [];
-        foreach ($this->players as $p) {
+        foreach ($this->getRoomPlayers($roomId) as $p) {
             $scores[$p['username']] = $p['score'];
         }
         arsort($scores);
         $roundWinner = array_key_first($scores);
-        $this->broadcastAll(['type'=>'ROUND_RESULT','roundWinner'=>$roundWinner,'scores'=>$scores]);
 
-        // Log ronde
-        $this->roundLog[] = ['round'=>$this->currentRound,'winner'=>$roundWinner,'scores'=>$scores];
+        $this->broadcastRoom($roomId, ['type'=>'ROUND_RESULT','roundWinner'=>$roundWinner,'scores'=>$scores]);
+        $room['roundLog'][] = ['round'=>$room['currentRound'],'winner'=>$roundWinner,'scores'=>$scores];
 
-        if ($this->currentRound >= self::MAX_ROUNDS) {
-            $this->scheduleCall(2500, fn() => $this->endGame());
+        if ($room['currentRound'] >= self::MAX_ROUNDS) {
+            $this->scheduleCall(2500, fn() => $this->endGame($roomId));
         } else {
-            $this->scheduleCall(2500, fn() => $this->startRound());
+            $this->scheduleCall(2500, fn() => $this->startRound($roomId));
         }
     }
 
-    private function endGame(): void {
-        $this->gameStarted = false;
-        $this->cancelAllItemTimers();
-        echo "[GAME]   Selesai!\n";
+    private function endGame(string $roomId): void {
+        if (!isset($this->rooms[$roomId])) return;
+        $room = &$this->rooms[$roomId];
+        $room['gameStarted'] = false;
+
+        echo "[GAME]   Selesai! Room: {$roomId}\n";
 
         $statsPerPlayer = [];
-        foreach ($this->players as $p) {
+        foreach ($this->getRoomPlayers($roomId) as $p) {
             $log  = $p['reactionLog'];
             $avg  = count($log) ? round(array_sum($log)/count($log), 2) : null;
             $best = count($log) ? round(min($log), 2) : null;
@@ -545,54 +656,47 @@ class Logic implements MessageComponentInterface {
 
         usort($statsPerPlayer, fn($a,$b) => $b['score'] <=> $a['score']);
 
-        $this->broadcastAll(['type'=>'GAME_OVER','stats'=>$statsPerPlayer]);
+        $this->broadcastRoom($roomId, ['type'=>'GAME_OVER','stats'=>$statsPerPlayer]);
         echo "[STATS]  " . json_encode($statsPerPlayer, JSON_PRETTY_PRINT) . "\n";
 
-        $this->saveToDatabase($statsPerPlayer);
-        $this->scheduleCall(5000, fn() => $this->resetGame());
-    }
+        $this->saveToDatabase($statsPerPlayer, $room['roundLog']);
 
-    private function resetGame(): void {
-        $this->gameStarted   = false;
-        $this->currentRound  = 0;
-        $this->activeItems   = [];
-        $this->roundLog      = [];
-        $this->itemIdCounter = 0;
-
-        foreach ($this->players as &$p) {
-            $p['score']=0; $p['reactionLog']=[]; $p['combo']=0;
-            $p['penalties']=0; $p['isReady']=false;
-        }
-        unset($p);
-
-        echo "[RESET]  Sesi direset.\n";
-        $this->broadcastPlayerList();
-    }
-
-    private function cancelAllItemTimers(): void {
-        // ReactPHP tidak bisa cancel timer tanpa reference.
-        // Kita cukup kosongkan activeItems — scheduleCall akan cek isset() dan skip.
-        $this->activeItems = [];
+        // Bersihkan room setelah 5 detik (beri waktu client terima GAME_OVER)
+        $this->scheduleCall(5000, function() use ($roomId) {
+            if (!isset($this->rooms[$roomId])) return;
+            // Reset player state
+            foreach ($this->players as &$p) {
+                if (($p['roomId'] ?? null) === $roomId) {
+                    $p['roomId'] = null; $p['isReady'] = false;
+                    $p['score'] = 0; $p['combo'] = 0;
+                    $p['reactionLog'] = []; $p['penalties'] = 0;
+                }
+            }
+            unset($p);
+            unset($this->rooms[$roomId]);
+            echo "[ROOM]   {$roomId} dihapus setelah game selesai.\n";
+            $this->broadcastAll(['type' => 'PLAYER_LIST', 'players' => $this->getPlayerListData()]);
+        });
     }
 
     // =========================================================
-    //  BROADCAST SCORE UPDATE
+    //  BROADCAST SCORE UPDATE (per room)
     // =========================================================
-    private function broadcastScoreUpdate(): void {
-        // Kirim skor individual ke masing-masing pemain
-        foreach ($this->players as $me) {
+    private function broadcastScoreUpdate(string $roomId): void {
+        $roomPlayers = $this->getRoomPlayers($roomId);
+
+        foreach ($roomPlayers as $me) {
             $myAvg  = count($me['reactionLog']) ? round(array_sum($me['reactionLog'])/count($me['reactionLog']), 0) : null;
             $myBest = count($me['reactionLog']) ? round(min($me['reactionLog']), 0) : null;
 
-            // Skor lawan
             $oppScore = 0;
-            foreach ($this->players as $opp) {
+            foreach ($roomPlayers as $opp) {
                 if ($opp['username'] !== $me['username']) { $oppScore = $opp['score']; break; }
             }
 
             $me['conn']->send($this->encode([
                 'type'           => 'SCORE_UPDATE',
-                'myScore'        => $me['score'],
+                'myScore'        => $me['score'],          // int, bukan string
                 'opponentScore'  => $oppScore,
                 'myCombo'        => $me['combo'],
                 'myAvgReaction'  => $myAvg  ? $myAvg  . 'ms' : '---',
@@ -606,7 +710,10 @@ class Logic implements MessageComponentInterface {
     // =========================================================
     private function handleGetLeaderboard(ConnectionInterface $from): void {
         $db = getDB();
-        if (!$db) { $from->send($this->encode(['type'=>'leaderboard_data','data'=>[]])); return; }
+        if (!$db) {
+            $from->send($this->encode(['type'=>'leaderboard_data','data'=>[]]));
+            return;
+        }
         try {
             $stmt = $db->query("SELECT username,icon,total_score,avg_reaction_time,best_time,games_played,level FROM players_stats ORDER BY total_score DESC LIMIT 10");
             $from->send($this->encode(['type'=>'leaderboard_data','data'=>$stmt->fetchAll()]));
@@ -619,7 +726,7 @@ class Logic implements MessageComponentInterface {
     // =========================================================
     //  DATABASE
     // =========================================================
-    private function saveToDatabase(array $stats): void {
+    private function saveToDatabase(array $stats, array $roundLog): void {
         $db = getDB();
         if (!$db) { echo "[DB ERR] Skip.\n"; return; }
         try {
@@ -640,7 +747,6 @@ class Logic implements MessageComponentInterface {
                 if ($p['isGuest']) continue;
                 $stmtStats->execute([':u'=>$p['username'],':i'=>$p['icon'],':s'=>$p['score'],':a'=>$p['avgTime'],':b'=>$p['bestTime']]);
 
-                // Update users table
                 if ($p['bestTime'] !== null) {
                     $db->prepare("UPDATE users SET best_time=IF(best_time IS NULL OR :b<best_time,:b,best_time), games_played=games_played+1, level=GREATEST(1,FLOOR(games_played/5)+1) WHERE username=:u")
                        ->execute([':b'=>$p['bestTime'],':u'=>$p['username']]);
@@ -648,15 +754,14 @@ class Logic implements MessageComponentInterface {
                 echo "[DB]     {$p['username']} | Skor: {$p['score']}\n";
             }
 
-            // Round logs
-            if (!empty($this->roundLog)) {
+            if (!empty($roundLog)) {
                 $stmtRound = $db->prepare("INSERT INTO round_logs (username, reaction_time, round_score, is_foul) VALUES (:u,:t,:s,0)");
-                foreach ($this->roundLog as $r) {
+                foreach ($roundLog as $r) {
                     foreach ($stats as $p) {
                         $stmtRound->execute([':u'=>$p['username'],':t'=>$p['avgTime']??0,':s'=>$r['scores'][$p['username']]??0]);
                     }
                 }
-                echo "[DB]     Round logs: " . count($this->roundLog) . "\n";
+                echo "[DB]     Round logs: " . count($roundLog) . "\n";
             }
         } catch (\PDOException $e) {
             echo "[DB ERR] {$e->getMessage()}\n";
@@ -666,17 +771,56 @@ class Logic implements MessageComponentInterface {
     // =========================================================
     //  HELPERS
     // =========================================================
+
+    /** Broadcast ke semua client (lobby) */
     private function broadcastAll(array $payload): void {
         $json = $this->encode($payload);
         foreach ($this->clients as $c) { $c->send($json); }
     }
 
-    private function broadcastPlayerList(): void {
-        $list = array_map(fn($p) => [
-            'name'=>$p['username'],'icon'=>$p['icon'],'score'=>$p['score'],
-            'isGuest'=>$p['isGuest'],'ready'=>$p['isReady'],'level'=>1,
+    /** Broadcast hanya ke pemain dalam satu room */
+    private function broadcastRoom(string $roomId, array $payload): void {
+        $json = $this->encode($payload);
+        foreach ($this->players as $p) {
+            if (($p['roomId'] ?? null) === $roomId) {
+                $p['conn']->send($json);
+            }
+        }
+    }
+
+    /** Ambil semua player dalam room tertentu */
+    private function getRoomPlayers(string $roomId): array {
+        return array_values(
+            array_filter($this->players, fn($p) => ($p['roomId'] ?? null) === $roomId)
+        );
+    }
+
+    /** Ambil roomId dari connection */
+    private function getPlayerRoomId(ConnectionInterface $conn): ?string {
+        foreach ($this->players as $p) {
+            if ($p['conn'] === $conn) return $p['roomId'] ?? null;
+        }
+        return null;
+    }
+
+    /** Cari data player berdasarkan username */
+    private function findPlayer(string $username): ?array {
+        foreach ($this->players as $p) {
+            if ($p['username'] === $username) return $p;
+        }
+        return null;
+    }
+
+    /** Data list pemain untuk broadcast PLAYER_LIST */
+    private function getPlayerListData(): array {
+        return array_map(fn($p) => [
+            'name'    => $p['username'],
+            'icon'    => $p['icon'],
+            'score'   => $p['score'],
+            'isGuest' => $p['isGuest'],
+            'ready'   => $p['isReady'],
+            'level'   => 1,
         ], $this->players);
-        $this->broadcastAll(['type'=>'PLAYER_LIST','players'=>$list]);
     }
 
     private function removePlayer(ConnectionInterface $conn): void {
@@ -684,7 +828,9 @@ class Logic implements MessageComponentInterface {
     }
 
     private function getUsernameByConn(ConnectionInterface $conn): ?string {
-        foreach ($this->players as $p) { if ($p['conn'] === $conn) return $p['username']; }
+        foreach ($this->players as $p) {
+            if ($p['conn'] === $conn) return $p['username'];
+        }
         return null;
     }
 
@@ -697,17 +843,29 @@ class Logic implements MessageComponentInterface {
     private function saveChatMessage(string $username, string $message): void {
         $db = getDB();
         if (!$db) return;
-        try { $db->prepare("INSERT INTO chat_messages (username,message) VALUES (:u,:m)")->execute([':u'=>$username,':m'=>$message]); }
-        catch (\PDOException $e) { echo "[DB ERR] Chat: {$e->getMessage()}\n"; }
+        try {
+            $db->prepare("INSERT INTO chat_messages (username,message) VALUES (:u,:m)")
+               ->execute([':u'=>$username,':m'=>$message]);
+        } catch (\PDOException $e) {
+            echo "[DB ERR] Chat: {$e->getMessage()}\n";
+        }
     }
 
     private function sendChatHistory(ConnectionInterface $conn): void {
         $db = getDB();
         if (!$db) return;
         try {
-            $rows = array_reverse($db->query("SELECT username,message,created_at FROM chat_messages ORDER BY created_at DESC LIMIT 20")->fetchAll());
+            $rows = array_reverse(
+                $db->query("SELECT username,message,created_at FROM chat_messages ORDER BY created_at DESC LIMIT 20")
+                   ->fetchAll()
+            );
             foreach ($rows as $r) {
-                $conn->send($this->encode(['type'=>'CHAT_MESSAGE','username'=>$r['username'],'message'=>$r['message'],'time'=>date('H:i',strtotime($r['created_at']))]));
+                $conn->send($this->encode([
+                    'type'     => 'CHAT_MESSAGE',
+                    'username' => $r['username'],
+                    'message'  => $r['message'],
+                    'time'     => date('H:i', strtotime($r['created_at'])),
+                ]));
             }
         } catch (\PDOException $e) {}
     }
