@@ -220,6 +220,7 @@ const Network = {
         switch (msg.type) {
 
             // Auth
+            // Auth
             case 'AUTH_RESULT':
                 if (msg.success) {
                     AppState.user = msg.user;
@@ -227,9 +228,15 @@ const Network = {
                     AppState.isLoggedIn = true;
                     sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
                     Auth.onSuccess();
+                    Network.send({
+                        type:    'JOIN',
+                        username: AppState.user.username,
+                        icon:    AppState.user.icon || 'fa-user',
+                        isGuest: false
+                    });
                 } else {
                     if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnLogin)   { els.btnLogin.textContent = "LOGIN"; els.btnLogin.disabled = false; }
+                    if(els.btnLogin)   { els.btnLogin.textContent = "LOG IN"; els.btnLogin.disabled = false; }
                 }
                 break;
 
@@ -240,9 +247,18 @@ const Network = {
                     AppState.isLoggedIn = true;
                     sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
                     Auth.onSuccess();
+                    
+                    // FIX: Kirim JOIN setelah register sukses!
+                    Network.send({
+                        type:    'JOIN',
+                        username: AppState.user.username,
+                        icon:    AppState.user.icon || 'fa-user',
+                        isGuest: false
+                    });
+                    
                 } else {
                     if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnRegister) { els.btnRegister.textContent = "DAFTAR"; els.btnRegister.disabled = false; }
+                    if(els.btnRegister) { els.btnRegister.textContent = "CREATE NEW ACCOUNT"; els.btnRegister.disabled = false; }
                 }
                 break;
 
