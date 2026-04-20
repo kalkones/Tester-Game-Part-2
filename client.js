@@ -385,7 +385,7 @@ const UI = {
         ).join('');
     },
 
-    appendChat: (username, message, time) => {
+    appendChat: (username, message) => {
         if (!els.chatBox) return;
         const div = document.createElement('div');
         div.className = 'chat-msg';
@@ -590,7 +590,7 @@ const Game = {
 
         el.innerHTML = `<i class="fas ${iconClass}"></i><div class="trash-timer"><div class="timer-fill" style="color:${color}"></div></div>`;
 
-        // Animasi gerak (visual only, tidak mempengaruhi logic)
+        // Animasi gerak (visual )
         if (round >= 3) {
             const sf = (round - 2) * 0.5;
             el.style.setProperty('--dx', `${(Math.random()-0.5)*80*sf}px`);
@@ -626,7 +626,7 @@ const Game = {
             }
         };
 
-        // Timer visual (animasi bar — tidak berhubungan dengan expiry server)
+        // Timer visual (animasi bar )
         const timerFill = el.querySelector('.timer-fill');
         const startTime = performance.now();
         const interval  = setInterval(() => {
