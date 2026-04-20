@@ -247,8 +247,6 @@ const Network = {
                     AppState.isLoggedIn = true;
                     sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
                     Auth.onSuccess();
-                    
-                    // FIX: Kirim JOIN setelah register sukses!
                     Network.send({
                         type:    'JOIN',
                         username: AppState.user.username,
@@ -268,7 +266,7 @@ const Network = {
                 break;
 
             case 'CHAT_MESSAGE':
-                UI.appendChat(msg.username, msg.message, msg.time);
+                UI.appendChat(msg.username, msg.message);
                 break;
 
             // Matchmaking
