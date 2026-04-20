@@ -4,26 +4,27 @@
 function getDB(): ?PDO {
     static $pdo = null;
 
-    // Cek koneksi masih hidup (idle reconnect)
     if ($pdo !== null) {
-        try {
-            $pdo->query("SELECT 1");
-        } catch (\PDOException $e) {
-            echo "[DB]     Koneksi terputus (idle), reconnecting...\n";
-            $pdo = null;
-        }
+        try { $pdo->query("SELECT 1"); }
+        catch (\PDOException $e) { echo "[DB] Reconnecting...\n"; $pdo = null; }
     }
 
     if ($pdo !== null) return $pdo;
 
     // Railway env vars (prioritas) → fallback lokal
-    $host = getenv('mainline.proxy.rlwy.net')     ?: getenv('MYSQL_HOST')     ?: 'localhost';
-    $port = getenv('46463')     ?: getenv('MYSQL_PORT')     ?: '3306';
-    $db   = getenv('railway') ?: getenv('MYSQL_DATABASE') ?: 'railway';
-    $user = getenv('root')     ?: getenv('MYSQL_USER')     ?: 'root';
-    $pass = getenv('NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV') ?: getenv('MYSQL_PASSWORD') ?: '';
+    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'mainline.proxy.rlwy.net';
+    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '46463';
+    $db   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE') ?: 'railway';
+    $user = getenv('MYSQLUSER')     ?: getenv('MYSQL_USER')     ?: 'root';
+    $pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
 
-    echo "[DB]     Konek: host={$host} port={$port} db={$db} user={$user}\n";
+    echo "[DB] Konek: host={$host} port={$port} db={$db} user={$user}\n";
+
+    // Deteksi apakah masih pakai localhost (env var belum terhubung)
+    if ($host === 'localhost') {
+        echo "[DB WARN] ⚠️ Host masih localhost — env var MySQL belum dihubungkan ke service ini!\n";
+        echo "[DB WARN] Buka Railway → project-game → Variables → Add Reference dari MySQL.\n";
+    }
 
     try {
         $pdo = new PDO(
@@ -33,13 +34,14 @@ function getDB(): ?PDO {
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_TIMEOUT            => 10,
             ]
         );
-        echo "[DB]     ✅ Koneksi berhasil! ({$db}@{$host})\n";
+        echo "[DB] ✅ Koneksi berhasil! ({$db}@{$host}:{$port})\n";
         return $pdo;
 
     } catch (\PDOException $e) {
         echo "[DB ERR] ❌ Gagal: {$e->getMessage()}\n";
-        return null; // server tidak crash
+        return null;
     }
 }
