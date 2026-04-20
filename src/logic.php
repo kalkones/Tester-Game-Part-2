@@ -218,6 +218,8 @@ class Logic implements MessageComponentInterface {
         $username = trim($data['username'] ?? '');
         $icon     = $data['icon']          ?? 'fa-user';
         $isGuest  = $data['isGuest']        ?? false;
+        $level    = $data['level']          ?? 1;
+
         if (!$username) return;
 
         foreach ($this->players as $p) {
@@ -229,6 +231,7 @@ class Logic implements MessageComponentInterface {
 
         $this->players[] = [
             'conn'=>$conn,'username'=>$username,'icon'=>$icon,'isGuest'=>$isGuest,
+            'level'=>$level,
             'score'=>0,'reactionLog'=>[],'combo'=>0,'penalties'=>0,'isReady'=>false,'findingMatch'=>false,
         ];
 
@@ -674,7 +677,8 @@ class Logic implements MessageComponentInterface {
     private function broadcastPlayerList(): void {
         $list = array_map(fn($p) => [
             'name'=>$p['username'],'icon'=>$p['icon'],'score'=>$p['score'],
-            'isGuest'=>$p['isGuest'],'ready'=>$p['isReady'],'level'=>1,
+            'isGuest'=>$p['isGuest'],'ready'=>$p['isReady'],
+            'level'=>$p['level'] ?? 1,
         ], $this->players);
         $this->broadcastAll(['type'=>'PLAYER_LIST','players'=>$list]);
     }
