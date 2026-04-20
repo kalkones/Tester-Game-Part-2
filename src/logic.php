@@ -638,34 +638,58 @@ class Logic implements MessageComponentInterface {
     // =========================================================
     private function saveToDatabase(array $stats): void {
         $db = getDB();
-        if (!$db) { echo "[DB ERR] Skip.\n"; return; }
+        if (!$db) { echo "[DB ERR] Skip. Koneksi mati.\n"; return; }
+
+        echo "\n[DEBUG] === MEMULAI PROSES SAVE KE DATABASE ===\n";
+        echo "[DEBUG] Jumlah pemain yang akan di-save: " . count($stats) . "\n";
+
         try {
-            $stmtStats = $db->prepare("
-                INSERT INTO players_stats (username, icon, total_score, avg_reaction_time, best_time, games_played)
-                VALUES (:u, :i, :s, :a, :b, 1)
-                ON DUPLICATE KEY UPDATE
-                    icon              = VALUES(icon),
-                    total_score       = total_score + VALUES(total_score),
-                    avg_reaction_time = IF(avg_reaction_time IS NULL, VALUES(avg_reaction_time),
-                                          ROUND((avg_reaction_time + VALUES(avg_reaction_time))/2, 2)),
-                    best_time         = IF(best_time IS NULL OR VALUES(best_time) < best_time, VALUES(best_time), best_time),
-                    games_played      = games_played + 1,
-                    level             = GREATEST(1, FLOOR(games_played/5)+1)
-            ");
-
             foreach ($stats as $p) {
-                if ($p['isGuest']) continue;
-                $stmtStats->execute([':u'=>$p['username'],':i'=>$p['icon'],':s'=>$p['score'],':a'=>$p['avgTime'],':b'=>$p['bestTime']]);
+                echo "[DEBUG] Mengecek pemain: {$p['username']} | isGuest: " . ($p['isGuest'] ? 'Yes' : 'No') . "\n";
 
-                // Update users table
-                if ($p['bestTime'] !== null) {
-                    $db->prepare("UPDATE users SET best_time=IF(best_time IS NULL OR :b<best_time,:b,best_time), games_played=games_played+1, level=GREATEST(1,FLOOR(games_played/5)+1) WHERE username=:u")
-                       ->execute([':b'=>$p['bestTime'],':u'=>$p['username']]);
+                // 1. CEK GUEST
+                if ($p['isGuest']) {
+                    echo "[DEBUG] -> SKIP: {$p['username']} tidak di-save karena berstatus Guest.\n";
+                    continue;
                 }
-                echo "[DB]     {$p['username']} | Skor: {$p['score']}\n";
+
+                // 2. UPDATE TABEL USERS (Level & Games Played)
+                // Ini diprioritaskan agar games_played pasti bertambah!
+                $stmtUser = $db->prepare("UPDATE users SET games_played = games_played + 1, level = GREATEST(1, FLOOR((games_played + 1)/5) + 1) WHERE username = :u");
+                $stmtUser->execute([':u' => $p['username']]);
+                echo "[DEBUG] -> SUKSES: Level & Games Played {$p['username']} berhasil di-update.\n";
+
+                // 3. UPDATE BEST TIME DI TABEL USERS (Hanya jika kena item)
+                if ($p['bestTime'] !== null) {
+                    $stmtTime = $db->prepare("UPDATE users SET best_time = IF(best_time IS NULL OR :b < best_time, :b, best_time) WHERE username = :u");
+                    $stmtTime->execute([':b' => $p['bestTime'], ':u' => $p['username']]);
+                    echo "[DEBUG] -> SUKSES: Best Time {$p['username']} di-update.\n";
+                }
+
+                // 4. UPDATE TABEL PLAYERS_STATS (Leaderboard)
+                $stmtStats = $db->prepare("
+                    INSERT INTO players_stats (username, icon, total_score, avg_reaction_time, best_time, games_played)
+                    VALUES (:u, :i, :s, :a, :b, 1)
+                    ON DUPLICATE KEY UPDATE
+                        icon              = VALUES(icon),
+                        total_score       = total_score + VALUES(total_score),
+                        avg_reaction_time = IF(avg_reaction_time IS NULL, VALUES(avg_reaction_time),
+                                            ROUND((avg_reaction_time + VALUES(avg_reaction_time))/2, 2)),
+                        best_time         = IF(best_time IS NULL OR VALUES(best_time) < best_time, VALUES(best_time), best_time),
+                        games_played      = games_played + 1,
+                        level             = GREATEST(1, FLOOR((games_played)/5) + 1)
+                ");
+                $stmtStats->execute([
+                    ':u' => $p['username'],
+                    ':i' => $p['icon'],
+                    ':s' => $p['score'],
+                    ':a' => $p['avgTime'],
+                    ':b' => $p['bestTime']
+                ]);
+                echo "[DEBUG] -> SUKSES: Tabel Leaderboard {$p['username']} di-update.\n";
             }
 
-            // Round logs
+            // 5. UPDATE ROUND LOGS (Tetap seperti semula)
             if (!empty($this->roundLog)) {
                 $stmtRound = $db->prepare("INSERT INTO round_logs (username, reaction_time, round_score, is_foul) VALUES (:u,:t,:s,0)");
                 foreach ($this->roundLog as $r) {
@@ -673,10 +697,14 @@ class Logic implements MessageComponentInterface {
                         $stmtRound->execute([':u'=>$p['username'],':t'=>$p['avgTime']??0,':s'=>$r['scores'][$p['username']]??0]);
                     }
                 }
-                echo "[DB]     Round logs: " . count($this->roundLog) . "\n";
+                echo "[DEBUG] -> SUKSES: Round logs berhasil disimpan.\n";
             }
+
+            echo "[DEBUG] === PROSES SAVE SELESAI ===\n\n";
+
         } catch (\PDOException $e) {
-            echo "[DB ERR] {$e->getMessage()}\n";
+            // Jika ada error SQL, pesan ini akan muncul warna merah di terminal
+            echo "\n[DB ERR FATAL] GAGAL SIMPAN: {$e->getMessage()}\n\n";
         }
     }
 
