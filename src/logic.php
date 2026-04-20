@@ -170,7 +170,7 @@ class Logic implements MessageComponentInterface {
                 'email'=>$user['email'],
                 'icon'=>$user['icon'],
                 'level'=>$user['level'],
-                'totalXP'=>$user['total_xp']??0,
+                'totalXP'=>(int)($user['total_xp']??0),
                 'gamesPlayed'=>$user['games_played'],
                 'bestTime'=>$user['best_time'],
                 'type'=>'registered',
@@ -643,34 +643,43 @@ class Logic implements MessageComponentInterface {
         echo "\n[DEBUG] === MEMULAI PROSES SAVE KE DATABASE ===\n";
 
         try {
-            foreach ($stats as $p) {
+            foreach ($stats as $index => $p) {
                 // 1. CEK GUEST
                 if ($p['isGuest']) {
                     echo "[DEBUG] -> SKIP: {$p['username']} (Guest).\n";
                     continue;
                 }
 
-                // 2. UPDATE TABEL USERS (Level & Games Played)
-                $stmtUser = $db->prepare("UPDATE users SET games_played = games_played + 1, level = GREATEST(1, FLOOR((games_played + 1)/5) + 1) WHERE username = :u");
-                $stmtUser->execute([':u' => $p['username']]);
-                echo "[DEBUG] -> SUKSES: Level {$p['username']} di-update.\n";
+                // --- 2. LOGIKA XP BARU ---
+                // Karena array $stats sudah diurutkan (Pemenang di paling atas/index 0)
+                $xpGained = ($index === 0) ? 500 : 100;
 
-                // 3. UPDATE BEST TIME DI TABEL USERS (Solusi Error HY093)
-                // Kita gunakan :b1 dan :b2 agar PHP tidak bingung
+                // Ambil XP lama dari Database
+                $stmtGet = $db->prepare("SELECT total_xp FROM users WHERE username = :u");
+                $stmtGet->execute([':u' => $p['username']]);
+                $row = $stmtGet->fetch();
+                $oldXp = $row ? (int)$row['total_xp'] : 0;
+
+                // Hitung XP baru dan Level Baru
+                $newXp = $oldXp + $xpGained;
+                $newLevel = $this->calculateLevel($newXp);
+                // -------------------------
+
+                // 3. UPDATE TABEL USERS (Level, Games Played, Total XP)
+                $stmtUser = $db->prepare("UPDATE users SET games_played = games_played + 1, level = :lvl, total_xp = :xp WHERE username = :u");
+                $stmtUser->execute([':lvl' => $newLevel, ':xp' => $newXp, ':u' => $p['username']]);
+                echo "[DEBUG] -> SUKSES: {$p['username']} (XP: {$newXp}) naik ke Level {$newLevel}.\n";
+
+                // 4. UPDATE BEST TIME 
                 if ($p['bestTime'] !== null) {
                     $stmtTime = $db->prepare("UPDATE users SET best_time = IF(best_time IS NULL OR :b1 < best_time, :b2, best_time) WHERE username = :u");
-                    $stmtTime->execute([
-                        ':b1' => $p['bestTime'], 
-                        ':b2' => $p['bestTime'], 
-                        ':u'  => $p['username']
-                    ]);
-                    echo "[DEBUG] -> SUKSES: Best Time {$p['username']} di-update.\n";
+                    $stmtTime->execute([':b1' => $p['bestTime'], ':b2' => $p['bestTime'], ':u' => $p['username']]);
                 }
 
-                // 4. UPDATE TABEL PLAYERS_STATS (Leaderboard)
+                // 5. UPDATE TABEL PLAYERS_STATS (Leaderboard)
                 $stmtStats = $db->prepare("
-                    INSERT INTO players_stats (username, icon, total_score, avg_reaction_time, best_time, games_played)
-                    VALUES (:u, :i, :s, :a, :b, 1)
+                    INSERT INTO players_stats (username, icon, total_score, avg_reaction_time, best_time, games_played, level)
+                    VALUES (:u, :i, :s, :a, :b, 1, :lvl)
                     ON DUPLICATE KEY UPDATE
                         icon              = VALUES(icon),
                         total_score       = total_score + VALUES(total_score),
@@ -678,18 +687,15 @@ class Logic implements MessageComponentInterface {
                                             ROUND((avg_reaction_time + VALUES(avg_reaction_time))/2, 2)),
                         best_time         = IF(best_time IS NULL OR VALUES(best_time) < best_time, VALUES(best_time), best_time),
                         games_played      = games_played + 1,
-                        level             = GREATEST(1, FLOOR((games_played)/5) + 1)
+                        level             = VALUES(level)
                 ");
                 $stmtStats->execute([
-                    ':u' => $p['username'],
-                    ':i' => $p['icon'],
-                    ':s' => $p['score'],
-                    ':a' => $p['avgTime'],
-                    ':b' => $p['bestTime']
+                    ':u' => $p['username'], ':i' => $p['icon'], ':s' => $p['score'],
+                    ':a' => $p['avgTime'], ':b' => $p['bestTime'], ':lvl' => $newLevel
                 ]);
             }
 
-            // 5. UPDATE ROUND LOGS
+            // 6. UPDATE ROUND LOGS
             if (!empty($this->roundLog)) {
                 $stmtRound = $db->prepare("INSERT INTO round_logs (username, reaction_time, round_score, is_foul) VALUES (:u,:t,:s,0)");
                 foreach ($this->roundLog as $r) {
@@ -697,14 +703,27 @@ class Logic implements MessageComponentInterface {
                         $stmtRound->execute([':u'=>$p['username'],':t'=>$p['avgTime']??0,':s'=>$r['scores'][$p['username']]??0]);
                     }
                 }
-                echo "[DEBUG] -> SUKSES: Log ronde tersimpan.\n";
             }
-
             echo "[DEBUG] === PROSES SAVE SELESAI ===\n\n";
 
         } catch (\PDOException $e) {
             echo "\n[DB ERR FATAL] GAGAL SIMPAN: {$e->getMessage()}\n\n";
         }
+    }
+
+    private function calculateLevel(int $xp): int {
+        // Tabel XP yang sama persis dengan JavaScript Anda
+        $table = [
+            [1,0],[2,200],[3,600],[4,1100],[5,1700],[6,2500],[7,3500],
+            [8,4700],[9,6200],[10,8000],[11,10100],[12,12500],[13,15200],
+            [14,18200],[15,21500],[16,25100],[17,29000],[18,33200],[19,37700],[20,45000]
+        ];
+        $level = 1;
+        foreach ($table as $row) {
+            if ($xp >= $row[1]) { $level = $row[0]; } 
+            else { break; }
+        }
+        return $level;
     }
 
     // =========================================================
