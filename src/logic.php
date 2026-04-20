@@ -641,28 +641,29 @@ class Logic implements MessageComponentInterface {
         if (!$db) { echo "[DB ERR] Skip. Koneksi mati.\n"; return; }
 
         echo "\n[DEBUG] === MEMULAI PROSES SAVE KE DATABASE ===\n";
-        echo "[DEBUG] Jumlah pemain yang akan di-save: " . count($stats) . "\n";
 
         try {
             foreach ($stats as $p) {
-                echo "[DEBUG] Mengecek pemain: {$p['username']} | isGuest: " . ($p['isGuest'] ? 'Yes' : 'No') . "\n";
-
                 // 1. CEK GUEST
                 if ($p['isGuest']) {
-                    echo "[DEBUG] -> SKIP: {$p['username']} tidak di-save karena berstatus Guest.\n";
+                    echo "[DEBUG] -> SKIP: {$p['username']} (Guest).\n";
                     continue;
                 }
 
                 // 2. UPDATE TABEL USERS (Level & Games Played)
-                // Ini diprioritaskan agar games_played pasti bertambah!
                 $stmtUser = $db->prepare("UPDATE users SET games_played = games_played + 1, level = GREATEST(1, FLOOR((games_played + 1)/5) + 1) WHERE username = :u");
                 $stmtUser->execute([':u' => $p['username']]);
-                echo "[DEBUG] -> SUKSES: Level & Games Played {$p['username']} berhasil di-update.\n";
+                echo "[DEBUG] -> SUKSES: Level {$p['username']} di-update.\n";
 
-                // 3. UPDATE BEST TIME DI TABEL USERS (Hanya jika kena item)
+                // 3. UPDATE BEST TIME DI TABEL USERS (Solusi Error HY093)
+                // Kita gunakan :b1 dan :b2 agar PHP tidak bingung
                 if ($p['bestTime'] !== null) {
-                    $stmtTime = $db->prepare("UPDATE users SET best_time = IF(best_time IS NULL OR :b < best_time, :b, best_time) WHERE username = :u");
-                    $stmtTime->execute([':b' => $p['bestTime'], ':u' => $p['username']]);
+                    $stmtTime = $db->prepare("UPDATE users SET best_time = IF(best_time IS NULL OR :b1 < best_time, :b2, best_time) WHERE username = :u");
+                    $stmtTime->execute([
+                        ':b1' => $p['bestTime'], 
+                        ':b2' => $p['bestTime'], 
+                        ':u'  => $p['username']
+                    ]);
                     echo "[DEBUG] -> SUKSES: Best Time {$p['username']} di-update.\n";
                 }
 
@@ -686,10 +687,9 @@ class Logic implements MessageComponentInterface {
                     ':a' => $p['avgTime'],
                     ':b' => $p['bestTime']
                 ]);
-                echo "[DEBUG] -> SUKSES: Tabel Leaderboard {$p['username']} di-update.\n";
             }
 
-            // 5. UPDATE ROUND LOGS (Tetap seperti semula)
+            // 5. UPDATE ROUND LOGS
             if (!empty($this->roundLog)) {
                 $stmtRound = $db->prepare("INSERT INTO round_logs (username, reaction_time, round_score, is_foul) VALUES (:u,:t,:s,0)");
                 foreach ($this->roundLog as $r) {
@@ -697,13 +697,12 @@ class Logic implements MessageComponentInterface {
                         $stmtRound->execute([':u'=>$p['username'],':t'=>$p['avgTime']??0,':s'=>$r['scores'][$p['username']]??0]);
                     }
                 }
-                echo "[DEBUG] -> SUKSES: Round logs berhasil disimpan.\n";
+                echo "[DEBUG] -> SUKSES: Log ronde tersimpan.\n";
             }
 
             echo "[DEBUG] === PROSES SAVE SELESAI ===\n\n";
 
         } catch (\PDOException $e) {
-            // Jika ada error SQL, pesan ini akan muncul warna merah di terminal
             echo "\n[DB ERR FATAL] GAGAL SIMPAN: {$e->getMessage()}\n\n";
         }
     }
