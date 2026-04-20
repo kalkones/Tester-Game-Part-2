@@ -11,12 +11,12 @@ function getDB(): ?PDO {
 
     if ($pdo !== null) return $pdo;
 
-    // Railway env vars — WAJIB di-set di Variables service project-game
-    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'localhost';
-    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '3306';
+    // Railway env vars (prioritas) → fallback lokal
+    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'mainline.proxy.rlwy.net';
+    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '46463';
     $db   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE') ?: 'railway';
     $user = getenv('MYSQLUSER')     ?: getenv('MYSQL_USER')     ?: 'root';
-    $pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: '';
+    $pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
 
     echo "[DB] Konek: host={$host} port={$port} db={$db} user={$user}\n";
 
