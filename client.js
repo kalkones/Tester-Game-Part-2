@@ -385,7 +385,7 @@ const UI = {
         ).join('');
     },
 
-    appendChat: (username, message) => {
+    appendChat: (username, message, time) => {
         if (!els.chatBox) return;
         const div = document.createElement('div');
         div.className = 'chat-msg';
