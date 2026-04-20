@@ -100,7 +100,7 @@ function showScreen(name) {
 }
 
 // ============================================================
-//  AUTH — Gunakan WebSocket ke server, HAPUS localStorage
+//  AUTH — Gunakan WebSocket ke server
 // ============================================================
 const Auth = {
     login: () => {
@@ -108,7 +108,6 @@ const Auth = {
         const pass = els.passInput?.value;
         if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi username/email dan password!"; return; }
         if (!socket || socket.readyState !== WebSocket.OPEN) {
-            // Koneksi dulu, lalu login
             Network.connect(() => Auth.sendLogin(id, pass));
         } else {
             Auth.sendLogin(id, pass);
@@ -122,9 +121,9 @@ const Auth = {
         const id   = els.idInput?.value.trim();
         const pass = els.passInput?.value;
         if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi semua field!"; return; }
-        const isEmail    = id.includes('@');
-        const username   = isEmail ? id.split('@')[0] : id;
-        const email      = isEmail ? id : '';
+        const isEmail  = id.includes('@');
+        const username = isEmail ? id.split('@')[0] : id;
+        const email    = isEmail ? id : '';
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             Network.connect(() => Network.send({ type: 'AUTH_REGISTER', username, email, password: pass }));
         } else {
@@ -140,7 +139,6 @@ const Auth = {
         AppState.isLoggedIn = true;
         sessionStorage.setItem('rduel_current', JSON.stringify(guestUser));
         Auth.onSuccess();
-        // Guest: koneksi WebSocket untuk chat & matchmaking
         Network.connect();
     },
     onSuccess: () => {
@@ -182,7 +180,6 @@ const Network = {
         socket.onopen = () => {
             console.log("[WS] Terhubung ke server!");
             if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
-            // Kirim JOIN ke server agar masuk player list
             if (AppState.user) {
                 Network.send({
                     type:    'JOIN',
@@ -269,7 +266,6 @@ const Network = {
 
             case 'PLAYER_READY_UPDATE':
                 if (msg.username !== AppState.user?.username) {
-                    // Lawan sudah ready
                     if(els.readyStatusOpp) els.readyStatusOpp.className = 'status-dot ready';
                     if(els.readyTextOpp)   els.readyTextOpp.textContent = "READY!";
                 }
@@ -285,15 +281,22 @@ const Network = {
                 if(els.roundInd) els.roundInd.textContent = `MATCH ${msg.round} / 5`;
                 break;
 
+            // FIX BUG: Handle pesan WAIT dari server
+            case 'WAIT':
+                AppState.isGameActive = false; // item belum spawn, jangan terima klik
+                if(els.gameArea)  els.gameArea.className  = 'state-wait';
+                if(els.msgMain)   els.msgMain.textContent = `ROUND ${AppState.currentRound}`;
+                if(els.msgSub)    els.msgSub.textContent  = "Get Ready...";
+                if(els.msgMain)   els.msgMain.style.color = 'var(--accent-cyan)';
+                break;
+
             // ── SPAWN_ITEMS: server kirim daftar item ──────────
             case 'SPAWN_ITEMS':
-                // msg.items = [{id, type, top, left, duration, round}, ...]
                 Game.renderItems(msg.items, msg.round);
                 break;
 
             // ── ITEM_EXPIRED: server kasih tau item sudah mati ─
             case 'ITEM_EXPIRED':
-                // msg.itemId, msg.resetCombo
                 Game.removeItemEl(msg.itemId);
                 if (msg.resetCombo) {
                     AppState.myCombo = 0;
@@ -304,13 +307,11 @@ const Network = {
 
             // ── SCORE_UPDATE: skor resmi dari server ───────────
             case 'SCORE_UPDATE':
-                // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
                 Game.onScoreUpdate(msg);
                 break;
 
             // ── ROUND_RESULT: hasil akhir ronde ────────────────
             case 'ROUND_RESULT':
-                // msg = { roundWinner, scores: {playerA, playerB} }
                 Game.onRoundResult(msg);
                 break;
 
@@ -380,7 +381,6 @@ const UI = {
     },
 
     renderLeaderboard: (rows) => {
-        // Dipanggil dari dashboard atau lobby panel
         console.log('[LB]', rows);
     },
 
@@ -407,11 +407,13 @@ const UI = {
             const unlocked = d.level >= lvl;
             if (unlocked) {
                 div.innerHTML = `<i class="fas ${data.icon}" style="font-size:1.5rem;"></i>`;
-                if (AppState.user.icon === data.icon) { div.style.background = "rgba(0,245,255,0.2)"; div.style.boxShadow = "0 0 10px var(--accent-cyan)"; }
+                if (AppState.user.icon === data.icon) {
+                    div.style.background  = "rgba(0,245,255,0.2)";
+                    div.style.boxShadow   = "0 0 10px var(--accent-cyan)";
+                }
                 div.onclick = () => {
                     AppState.user.icon = data.icon;
                     sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
-                    // Kirim update icon ke server
                     Network.send({ type: 'UPDATE_ICON', username: AppState.user.username, icon: data.icon });
                     UI.updateProfileUI();
                     UI.initIconPicker();
@@ -427,21 +429,29 @@ const UI = {
     showResultModal: (stats) => {
         if (!els.resModal) return;
         const me = stats?.find(p => p.username === AppState.user?.username);
-        if(els.resScore) els.resScore.textContent = me?.score       ?? AppState.myScore;
-        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime     ?? AppState.myAvgReaction;
-        if(els.resBest)  els.resBest.textContent  = me?.bestTime    ?? AppState.myBestReaction;
-        if(els.resMode)  els.resMode.textContent  = "Match Finished";
+        if(els.resScore) els.resScore.textContent = me?.score    ?? AppState.myScore;
+        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime  ? `${me.avgTime}ms` : (AppState.myAvgReaction || '---');
+        if(els.resBest)  els.resBest.textContent  = me?.bestTime ? `${me.bestTime}ms` : (AppState.myBestReaction || '---');
 
-        // XP (dihitung berdasarkan hasil dari server)
-        if(!AppState.isGuest && me) {
-            const isWin   = stats[0]?.username === AppState.user.username;
-            const xpGained = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
+        // Tentukan menang/kalah berdasarkan urutan stats (sudah di-sort desc oleh server)
+        const isWin = stats?.[0]?.username === AppState.user?.username;
+        if(els.resMode) {
+            els.resMode.textContent = isWin ? "VICTORY! 🏆" : "DEFEAT";
+            els.resMode.style.color = isWin ? "var(--accent-green)" : "var(--accent-pink)";
+        }
+
+        // XP
+        if (!AppState.isGuest && me) {
+            const xpGained  = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
             const oldLevel  = getLevelData(AppState.user.totalXP || 0).level;
             AppState.user.totalXP = (AppState.user.totalXP || 0) + xpGained;
-            const newLevel = getLevelData(AppState.user.totalXP).level;
+            const newLevel  = getLevelData(AppState.user.totalXP).level;
             AppState.user.level = newLevel;
             sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
-            if(els.resXP) { els.resXP.textContent = `+${xpGained} XP`; els.resXP.style.color = isWin ? "var(--accent-green)" : "#888"; }
+            if(els.resXP) {
+                els.resXP.textContent = `+${xpGained} XP`;
+                els.resXP.style.color = isWin ? "var(--accent-green)" : "#888";
+            }
             UI.updateProfileUI();
             if (newLevel > oldLevel) {
                 if(els.msgSub) { els.msgSub.innerHTML = `LEVEL UP! Lv.${newLevel}`; els.msgSub.style.color = "var(--accent-yellow)"; }
@@ -452,8 +462,30 @@ const UI = {
         els.resModal.style.display = 'flex';
     },
 
+    // FIX BUG: UI.retryGame tidak ada sebelumnya → tombol PLAY AGAIN crash
+    retryGame: () => {
+        // Tutup modal
+        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
+        // Reset state lokal
+        AppState.isGameActive   = false;
+        AppState.myScore        = 0;
+        AppState.opponentScore  = 0;
+        AppState.myCombo        = 0;
+        AppState.activeItemEls  = {};
+        if(els.trashContainer) els.trashContainer.innerHTML = '';
+        // Kembali ke lobby dulu, lalu langsung cari match baru
+        showScreen('lobby');
+        UI.updateProfileUI();
+        UI.initIconPicker();
+        // Cari lawan baru otomatis
+        setTimeout(() => Game.startMatch(), 300);
+    },
+
     triggerLevelUpAnimation: () => {
-        if(els.displayLvl) { els.displayLvl.classList.add('level-up-anim'); setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600); }
+        if(els.displayLvl) {
+            els.displayLvl.classList.add('level-up-anim');
+            setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600);
+        }
     }
 };
 
@@ -479,7 +511,12 @@ const Game = {
         if(els.msgMain)   els.msgMain.textContent  = "SEARCHING";
         if(els.msgSub)    els.msgSub.textContent   = "Finding an opponent...";
 
-        // Kirim ke server — server yang cari lawan
+        // Reset score display
+        if(els.statScore) els.statScore.textContent = '0';
+        if(els.statAvg)   els.statAvg.textContent   = '---';
+        if(els.statBest)  els.statBest.textContent  = '---';
+        if(els.comboDisplay) els.comboDisplay.classList.remove('show');
+
         Network.send({ type: 'FIND_MATCH', username: AppState.user?.username });
     },
 
@@ -491,13 +528,14 @@ const Game = {
         if(els.readyStatusOpp) els.readyStatusOpp.className  = 'status-dot';
         if(els.readyTextOpp)   els.readyTextOpp.textContent  = "WAITING...";
         if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = false; els.btnReadyConfirm.textContent = "I AM READY"; }
+        if(els.msgMain)   els.msgMain.textContent = "MATCH FOUND!";
+        if(els.msgSub)    els.msgSub.textContent  = `vs ${opponentName}`;
     },
 
     confirmReady: () => {
         if(els.readyStatusMe)  els.readyStatusMe.className  = 'status-dot waiting';
         if(els.readyTextMe)    els.readyTextMe.textContent  = "WAITING OPPONENT...";
         if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = true; els.btnReadyConfirm.textContent = "READY"; }
-        // Kirim ke server
         Network.send({ type: 'PLAYER_READY', username: AppState.user?.username });
     },
 
@@ -510,14 +548,13 @@ const Game = {
     },
 
     // ── RENDER ITEMS dari server ──────────────────────────────
-    // Tidak ada random di sini! Semua data dari server
     renderItems: (items, round) => {
         if (!els.trashContainer) return;
         AppState.isGameActive = true;
         AppState.roundStartTime = performance.now();
-        els.gameArea.className = 'state-go';
-        if(els.msgMain) els.msgMain.textContent = '';
-        if(els.msgSub)  els.msgSub.textContent  = '';
+        if(els.gameArea) els.gameArea.className = 'state-go';
+        if(els.msgMain)  els.msgMain.textContent = '';
+        if(els.msgSub)   els.msgSub.textContent  = '';
         els.trashContainer.innerHTML = '';
         AppState.activeItemEls = {};
 
@@ -527,7 +564,6 @@ const Game = {
     },
 
     createItemEl: (item, round) => {
-        // item = { id, type, top, left, duration }
         const el = document.createElement('div');
         el.className = `trash-item ${item.type}`;
         el.style.top  = item.top  + '%';
@@ -562,7 +598,7 @@ const Game = {
                 type:      'ITEM_CLICKED',
                 itemId:    item.id,
                 username:  AppState.user?.username,
-                clickTime: Date.now() // timestamp untuk perhitungan latency di server
+                clickTime: Date.now()
             });
 
             // 3. Feedback visual instan (BUKAN skor — hanya animasi)
@@ -576,13 +612,13 @@ const Game = {
             }
         };
 
-        // Timer visual (hanya animasi bar — tidak berhubungan dengan expiry server)
+        // Timer visual (animasi bar — tidak berhubungan dengan expiry server)
         const timerFill = el.querySelector('.timer-fill');
         const startTime = performance.now();
-        const interval = setInterval(() => {
+        const interval  = setInterval(() => {
             const pct = 100 - ((performance.now() - startTime) / item.duration * 100);
             if (timerFill) timerFill.style.transform = `scaleX(${Math.max(0, pct/100)})`;
-            if (pct <= 0) clearInterval(interval);
+            if (pct <= 0)  clearInterval(interval);
         }, 16);
 
         AppState.activeItemEls[item.id] = el;
@@ -599,14 +635,12 @@ const Game = {
 
     // ── Terima skor resmi dari server ────────────────────────
     onScoreUpdate: (msg) => {
-        // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
         AppState.myScore       = msg.myScore       ?? AppState.myScore;
         AppState.opponentScore = msg.opponentScore ?? AppState.opponentScore;
         AppState.myCombo       = msg.myCombo       ?? AppState.myCombo;
         if (msg.myAvgReaction)  AppState.myAvgReaction  = msg.myAvgReaction;
         if (msg.myBestReaction) AppState.myBestReaction = msg.myBestReaction;
 
-        // Update UI
         if(els.statScore) els.statScore.textContent = AppState.myScore;
         if(els.statAvg)   els.statAvg.textContent   = AppState.myAvgReaction;
         if(els.statBest)  els.statBest.textContent  = AppState.myBestReaction;
@@ -619,10 +653,19 @@ const Game = {
     },
 
     onRoundResult: (msg) => {
-        // Tampilkan siapa yang menang ronde ini
+        const didIWin = msg.roundWinner === AppState.user?.username;
         if(els.msgMain) {
-            els.msgMain.textContent = msg.roundWinner === AppState.user?.username ? "ROUND WIN!" : "ROUND LOST";
-            els.msgMain.style.color = msg.roundWinner === AppState.user?.username ? "var(--accent-green)" : "var(--accent-red)";
+            els.msgMain.textContent = didIWin ? "ROUND WIN!" : "ROUND LOST";
+            els.msgMain.style.color = didIWin ? "var(--accent-green)" : "var(--accent-red)";
+        }
+        if(els.msgSub) {
+            // Tampilkan skor kedua pemain
+            const myScore  = msg.scores?.[AppState.user?.username] ?? 0;
+            const entries  = Object.entries(msg.scores ?? {});
+            const oppEntry = entries.find(([u]) => u !== AppState.user?.username);
+            const oppScore = oppEntry ? oppEntry[1] : 0;
+            els.msgSub.textContent = `You: ${myScore} — Opp: ${oppScore}`;
+            els.msgSub.style.color = '#fff';
         }
     },
 
@@ -636,12 +679,18 @@ const Game = {
     },
 
     showFeedback: (text, color, isPositive) => {
-        if(els.msgSub) { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
+        if(els.msgSub)  { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
         if(els.msgMain) { els.msgMain.textContent = isPositive ? "HIT!" : "OUCH!"; els.msgMain.style.color = color; }
     },
 
     backToLobby: () => {
         if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
+        AppState.isGameActive   = false;
+        AppState.myScore        = 0;
+        AppState.opponentScore  = 0;
+        AppState.myCombo        = 0;
+        AppState.activeItemEls  = {};
+        if(els.trashContainer) els.trashContainer.innerHTML = '';
         showScreen('lobby');
         UI.updateProfileUI();
         UI.initIconPicker();
@@ -656,7 +705,6 @@ const Chat = {
         if (e.key !== 'Enter' || !els.chatInput) return;
         const msg = els.chatInput.value.trim();
         if (!msg) return;
-        // Kirim ke server — server yang broadcast ke semua
         Network.send({ type: 'CHAT', username: AppState.user?.username, message: msg });
         els.chatInput.value = '';
     }
