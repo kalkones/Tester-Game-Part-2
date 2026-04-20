@@ -17,8 +17,8 @@ function getDB(): ?PDO {
     if ($pdo !== null) return $pdo;
 
     // Railway env vars (prioritas) → fallback lokal
-    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'mysql.railway.internal';
-    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '3306';
+    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'mainline.proxy.rlwy.net';
+    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '46463';
     $db   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE') ?: 'railway';
     $user = getenv('MYSQLUSER')     ?: getenv('MYSQL_USER')     ?: 'root';
     $pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
