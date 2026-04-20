@@ -150,9 +150,9 @@ class Logic implements MessageComponentInterface {
         try {
             $stmt = $db->prepare("SELECT * FROM users WHERE username = :id1 OR email = :id2 LIMIT 1");
             $stmt->execute([
-                ':id1' => $identifier, 
-                ':id2' => $identifier
-                ]);
+                $stmt->execute([
+                ':id1' => $id, 
+                ':id2' => $id])]);
             $user = $stmt->fetch();
             if (!$user || !password_verify($pass, $user['password_hash'])) {
                 $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Username atau password salah.']));
