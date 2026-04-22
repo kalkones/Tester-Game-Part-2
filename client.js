@@ -32,18 +32,48 @@ const ICON_UNLOCKS = {
     15:{icon:'fa-fire',name:'Inferno'}, 20:{icon:'fa-crown',name:'Legend'}
 };
 
-function getLevelData(totalXP) {
-    let currentLevel=1, nextXP=0, currentLevelXP=0;
-    for (let i=0; i<LEVEL_TABLE.length; i++) {
-        if (totalXP >= LEVEL_TABLE[i][1]) {
-            currentLevel=LEVEL_TABLE[i][0]; currentLevelXP=LEVEL_TABLE[i][1];
-            nextXP = (i+1<LEVEL_TABLE.length) ? LEVEL_TABLE[i+1][1] : LEVEL_TABLE[i][1];
-        } else break;
+function getLevelData(totalXP, serverLevel = null) {
+    let currentLevel = 1, currentLevelXP = 0, nextXP = 200;
+    
+    // 1. Jika ada level resmi dari server, gunakan itu sebagai patokan utama
+    if (serverLevel !== null && serverLevel !== undefined) {
+        currentLevel = serverLevel;
+        
+        // Cari batas bawah dan batas atas XP untuk level ini dari tabel
+        let levelRow = LEVEL_TABLE.find(row => row[0] === serverLevel);
+        if (levelRow) {
+            currentLevelXP = levelRow[1];
+            let nextRow = LEVEL_TABLE.find(row => row[0] === serverLevel + 1);
+            nextXP = nextRow ? nextRow[1] : currentLevelXP; // Jika max level
+        }
+        
+        // Jika XP yang dipunya kurang dari syarat level, kita tambal / sinkronkan
+        // (Ini menambal bug dimana database bilang Lv 2, tapi JS bilang XP masih 0)
+        if (totalXP < currentLevelXP) {
+            totalXP = currentLevelXP; 
+        }
+    } 
+    // 2. Jika tidak ada data server (misal saat nambah XP pas menang), hitung manual
+    else {
+        for (let i = 0; i < LEVEL_TABLE.length; i++) {
+            if (totalXP >= LEVEL_TABLE[i][1]) {
+                currentLevel = LEVEL_TABLE[i][0]; 
+                currentLevelXP = LEVEL_TABLE[i][1];
+                nextXP = (i + 1 < LEVEL_TABLE.length) ? LEVEL_TABLE[i + 1][1] : LEVEL_TABLE[i][1];
+            } else break;
+        }
     }
+
     const progressXP = totalXP - currentLevelXP;
     const neededXP   = Math.max(1, nextXP - currentLevelXP);
-    return { level:currentLevel, currentXP:totalXP, progressXP, neededXP,
-             progressPercent:(progressXP/neededXP)*100 };
+    
+    return { 
+        level: currentLevel, 
+        currentXP: totalXP, 
+        progressXP: progressXP, 
+        neededXP: neededXP,
+        progressPercent: (progressXP / neededXP) * 100 
+    };
 }
 
 // ── DOM Elements ──────────────────────────────────────────────
@@ -369,7 +399,12 @@ const UI = {
             if(els.xpBarContainer) els.xpBarContainer.style.display = "none";
         } else {
             if(els.xpBarContainer) els.xpBarContainer.style.display = "block";
-            const d = getLevelData(AppState.user.totalXP || 0);
+            // KITA KIRIM JUGA DATA LEVEL DARI SERVER (AppState.user.level)
+            const d = getLevelData(AppState.user.totalXP || 0, AppState.user.level); 
+            
+            // Simpan kembali XP yang sudah disinkronkan ke dalam AppState agar tidak hilang
+            AppState.user.totalXP = d.currentXP; 
+            
             if(els.displayLvl) els.displayLvl.innerHTML = `Lvl ${d.level} <span>${d.progressXP.toFixed(0)} / ${d.neededXP.toFixed(0)} XP</span>`;
             if(els.xpFill)     els.xpFill.style.width = `${d.progressPercent}%`;
         }
