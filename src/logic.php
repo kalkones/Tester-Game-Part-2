@@ -557,12 +557,14 @@ class Logic implements MessageComponentInterface {
                 'penalties'   => $p['penalties'],
                 'roundsWon'   => count($log),
                 'comboMax'    => $p['combo'],
+                'reactionLog' => $log,   // ← FIX: kirim array lengkap untuk grafik distribusi
             ];
         }
 
         usort($statsPerPlayer, fn($a,$b) => $b['score'] <=> $a['score']);
 
-        $this->broadcastAll(['type'=>'GAME_OVER','stats'=>$statsPerPlayer]);
+        // FIX: sertakan roundLog agar dashboard bisa render grafik tren per ronde
+        $this->broadcastAll(['type'=>'GAME_OVER','stats'=>$statsPerPlayer,'roundLog'=>$this->roundLog]);
         echo "[STATS]  " . json_encode($statsPerPlayer, JSON_PRETTY_PRINT) . "\n";
 
         $this->saveToDatabase($statsPerPlayer);
