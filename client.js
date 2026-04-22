@@ -361,7 +361,8 @@ const Network = {
 
             // Game Over
             case 'GAME_OVER':
-                Game.onGameOver(msg.stats);
+                // FIX: terima roundLog dari server, kirim ke dashboard via localStorage
+                Game.onGameOver(msg.stats, msg.roundLog || []);
                 break;
 
             // Leaderboard
@@ -718,12 +719,18 @@ const Game = {
         }
     },
 
-    onGameOver: (stats) => {
+    onGameOver: (stats, roundLog = []) => {
         AppState.isGameActive = false;
         if(els.gameArea) els.gameArea.className = 'state-wait';
         if(els.msgMain)  els.msgMain.textContent = "FINISH";
         if(els.trashContainer) els.trashContainer.innerHTML = '';
         AppState.activeItemEls = {};
+
+        // FIX: simpan sesi ke localStorage agar dashboard bisa membaca data
+        if (typeof window.saveGameSession === 'function') {
+            window.saveGameSession(stats, roundLog);
+        }
+
         UI.showResultModal(stats);
     },
 
