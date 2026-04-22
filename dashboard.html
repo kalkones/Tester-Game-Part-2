@@ -350,18 +350,6 @@ function saveSession(session) {
     if (sessions.length > 50) sessions.pop(); // maksimal 50 sesi
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
 }
-
-// Expose ke client.js agar bisa dipanggil saat GAME_OVER
-window.saveGameSession = function(stats, roundLog) {
-    const session = {
-        id:        'S' + Date.now(),
-        timestamp: new Date().toISOString(),
-        players:   stats,        // array dari server GAME_OVER
-        roundLog:  roundLog || [], // [{round, winner, time}]
-    };
-    saveSession(session);
-};
-
 // ══════════════════════════════════════════════
 //  RENDER
 // ══════════════════════════════════════════════
@@ -573,41 +561,53 @@ function makeChartOptions(extra = {}) {
     };
 }
 
-// Chart 1: Tren reaction time (5 sesi terakhir, per ronde)
+// Chart 1: Tren avg reaction time per sesi (up to 8 sesi terakhir)
+// Sebelumnya pakai r.time dari roundLog, tapi field itu tidak ada.
+// Sekarang pakai avgTime per player per sesi — data yang benar-benar tersedia.
 function buildTrendChart() {
     const ctx = document.getElementById('chart-trend').getContext('2d');
-    const recent = sessions.slice(0, 5).reverse();
+    if (!sessions.length) { renderEmptyChart(ctx, 'chart-trend'); return; }
 
-    if (!recent.length) {
-        renderEmptyChart(ctx, 'chart-trend'); return;
-    }
+    // Ambil semua username unik dari semua sesi (maks 4 untuk keterbacaan)
+    const allUsers = [...new Set(
+        sessions.flatMap(s => s.players?.map(p => p.username) || [])
+    )].slice(0, 4);
 
-    const colors = ['#00f5ff','#ff2d75','#00ff88','#ffe600','#ff8c00'];
-    const datasets = recent.map((s, i) => {
-        const times = s.roundLog?.map(r => r.winner === s.players?.[0]?.username ? parseFloat(r.time) : null) || [];
-        return {
-            label: `Sesi ${i+1}`,
-            data: times.slice(0,5),
-            borderColor: colors[i],
-            backgroundColor: colors[i] + '22',
-            tension: .4, pointRadius: 5,
-            borderWidth: 2, fill: false,
-        };
-    });
+    const recent = sessions.slice(0, 8).reverse(); // urut lama → baru
+    const colors  = ['#00f5ff', '#ff2d75', '#00ff88', '#ffe600', '#ff8c00'];
+
+    const datasets = allUsers.map((username, i) => ({
+        label: username,
+        data: recent.map(s => {
+            const p = s.players?.find(pl => pl.username === username);
+            return p?.avgTime ? parseFloat(p.avgTime) : null;
+        }),
+        borderColor:     colors[i],
+        backgroundColor: colors[i] + '22',
+        tension: .4, pointRadius: 5,
+        borderWidth: 2, fill: false,
+        spanGaps: true,
+    })).filter(d => d.data.some(v => v !== null)); // buang dataset yang kosong
+
+    if (!datasets.length) { renderEmptyChart(ctx, 'chart-trend'); return; }
 
     new Chart(ctx, {
         type: 'line',
-        data: { labels: ['Ronde 1','Ronde 2','Ronde 3','Ronde 4','Ronde 5'], datasets },
+        data: {
+            labels: recent.map((_, i) => `Sesi ${i + 1}`),
+            datasets,
+        },
         options: {
             ...makeChartOptions(),
             plugins: {
-                legend: { display: true, labels:{ font:{family:'Rajdhani,sans-serif',size:11}, boxWidth:12 } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}ms` } },
+                legend: { display: true, labels: { font: { family: 'Rajdhani,sans-serif', size: 11 }, boxWidth: 12 } },
+                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.raw}ms` } },
             },
             scales: {
                 ...makeChartOptions().scales,
-                y: { ...makeChartOptions().scales.y,
-                    title: { display:true, text:'Waktu Reaksi (ms)', color:'rgba(255,255,255,.4)', font:{size:10} }
+                y: {
+                    ...makeChartOptions().scales.y,
+                    title: { display: true, text: 'Avg Reaksi (ms)', color: 'rgba(255,255,255,.4)', font: { size: 10 } }
                 }
             }
         }
