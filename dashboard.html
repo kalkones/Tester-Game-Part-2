@@ -488,7 +488,7 @@ function _renderLeaderboardFromLocal() {
         avgTime:     p.times.length ? (p.times.reduce((a,b)=>a+b,0)/p.times.length).toFixed(0) : null,
         bestTime:    p.best_time.length ? Math.min(...p.best_time).toFixed(0) : null,
         consistency: p.times.length > 1 ? (Math.max(...p.times)-Math.min(...p.times)).toFixed(0) : null,
-    })).sort((a,b) => b.total_score - a.total_score);
+    })).sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
     _renderLeaderboardRows(rows);
 }
 
@@ -499,14 +499,14 @@ function _renderLeaderboardRows(rows) {
         return;
     }
     tbody.innerHTML = rows.map((r, i) => {
-        const avg  = parseFloat(r.avgTime) || 999;
-        const grade = avg < 200 ? 'WIN' : avg < 300 ? 'GOOD' : 'AVG';
+        const avg  = parseFloat(r.avgTime) || 9999;
+        const grade = avg < 500 ? 'WIN' : avg < 900 ? 'GOOD' : 'AVG';
         const badgeClass = grade === 'WIN' ? 'badge-win' : grade === 'GOOD' ? 'badge-good' : 'badge-avg';
         const rankClass  = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
         return `<tr class="${rankClass}">
             <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}</td>
             <td>${r.username}</td>
-            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.total_score}</td>
+            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.totalScore ?? r.total_score ?? 0}</td>
             <td>${r.avgTime ? r.avgTime + ' ms' : '---'}</td>
             <td style="color:var(--green)">${r.bestTime ? r.bestTime + ' ms' : '---'}</td>
             <td>${r.consistency ? '±' + r.consistency + ' ms' : '---'}</td>
@@ -521,7 +521,7 @@ function renderHistory() {
     if (!sessions.length) return;
 
     el.innerHTML = sessions.slice(0, 15).map(s => {
-        const winner   = s.players?.sort((a,b)=>(b.total_score||0)-(a.total_score||0))[0];
+        const winner   = s.players?.slice().sort((a,b)=>(b.score||0)-(a.score||0))[0];
         const dt       = new Date(s.timestamp);
         const timeStr  = dt.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
                        + ' ' + dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
