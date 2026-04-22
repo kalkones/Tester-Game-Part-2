@@ -726,9 +726,23 @@ const Game = {
         if(els.trashContainer) els.trashContainer.innerHTML = '';
         AppState.activeItemEls = {};
 
-        // FIX: simpan sesi ke localStorage agar dashboard bisa membaca data
-        if (typeof window.saveGameSession === 'function') {
-            window.saveGameSession(stats, roundLog);
+        // ── SIMPAN SESI LANGSUNG KE localStorage ──────────────
+
+        try {
+            const STORAGE_KEY = 'reactionDuel_sessions';
+            const session = {
+                id:        'S' + Date.now(),
+                timestamp: new Date().toISOString(),
+                players:   stats,    // {username, score, avgTime, bestTime, consistency, reactionLog, ...}
+                roundLog:  roundLog, // [{round, winner, scores}, ...]
+            };
+            const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            existing.unshift(session);
+            if (existing.length > 50) existing.pop();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+            console.log('[SESSION] Sesi tersimpan:', session.id);
+        } catch (e) {
+            console.warn('[SESSION] Gagal simpan sesi:', e);
         }
 
         UI.showResultModal(stats);
