@@ -442,7 +442,7 @@ function renderLeaderboard() {
                     // Data dari database Railway
                     const rows = msg.data.map(r => ({
                         username:   r.username,
-                        totalScore: parseInt(r.score),
+                        totalScore: parseInt(r.total_score),
                         avgTime:    r.avg_reaction_time ? parseFloat(r.avg_reaction_time).toFixed(0) : null,
                         bestTime:   r.best_time         ? parseFloat(r.best_time).toFixed(0)         : null,
                         consistency: null,
@@ -475,20 +475,20 @@ function _renderLeaderboardFromLocal() {
     sessions.forEach(s => {
         s.players?.forEach(p => {
             if (!playerMap[p.username]) {
-                playerMap[p.username] = { username: p.username, scores: [], times: [], bests: [] };
+                playerMap[p.username] = { username: p.username, total_score: [], times: [], best_time: [] };
             }
-            playerMap[p.username].scores.push(p.score || 0);
+            playerMap[p.username].total_score.push(p.total_score || 0);
             if (p.avgTime)  playerMap[p.username].times.push(parseFloat(p.avgTime));
-            if (p.bestTime) playerMap[p.username].bests.push(parseFloat(p.bestTime));
+            if (p.bestTime) playerMap[p.username].best_time.push(parseFloat(p.bestTime));
         });
     });
     const rows = Object.values(playerMap).map(p => ({
         username:    p.username,
-        totalScore:  p.scores.reduce((a,b)=>a+b,0),
+        totalScore:  p.total_score.reduce((a,b)=>a+b,0),
         avgTime:     p.times.length ? (p.times.reduce((a,b)=>a+b,0)/p.times.length).toFixed(0) : null,
-        bestTime:    p.bests.length ? Math.min(...p.bests).toFixed(0) : null,
+        bestTime:    p.best_time.length ? Math.min(...p.best_time).toFixed(0) : null,
         consistency: p.times.length > 1 ? (Math.max(...p.times)-Math.min(...p.times)).toFixed(0) : null,
-    })).sort((a,b) => b.totalScore - a.totalScore);
+    })).sort((a,b) => b.total_score - a.total_score);
     _renderLeaderboardRows(rows);
 }
 
@@ -506,7 +506,7 @@ function _renderLeaderboardRows(rows) {
         return `<tr class="${rankClass}">
             <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}</td>
             <td>${r.username}</td>
-            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.totalScore}</td>
+            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.total_score}</td>
             <td>${r.avgTime ? r.avgTime + ' ms' : '---'}</td>
             <td style="color:var(--green)">${r.bestTime ? r.bestTime + ' ms' : '---'}</td>
             <td>${r.consistency ? '±' + r.consistency + ' ms' : '---'}</td>
@@ -521,7 +521,7 @@ function renderHistory() {
     if (!sessions.length) return;
 
     el.innerHTML = sessions.slice(0, 15).map(s => {
-        const winner   = s.players?.sort((a,b)=>(b.score||0)-(a.score||0))[0];
+        const winner   = s.players?.sort((a,b)=>(b.total_score||0)-(a.total_score||0))[0];
         const dt       = new Date(s.timestamp);
         const timeStr  = dt.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
                        + ' ' + dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
