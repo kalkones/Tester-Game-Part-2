@@ -8,704 +8,539 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --bg:          #08080e;
-            --bg-card:     rgba(14,14,26,.9);
-            --bg-card2:    rgba(20,20,36,.8);
-            --border:      rgba(0,245,255,.15);
-            --cyan:        #00f5ff;
-            --pink:        #ff2d75;
-            --green:       #00ff88;
-            --yellow:      #ffe600;
-            --orange:      #ff8c00;
-            --text-muted:  rgba(255,255,255,.45);
-        }
-
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-        body {
-            font-family: 'Rajdhani', sans-serif;
-            background: var(--bg);
-            color: #fff;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* ── Dot grid background ── */
-        body::before {
-            content: '';
-            position: fixed; inset: 0; z-index: 0;
-            background-image: radial-gradient(rgba(0,245,255,.07) 1px, transparent 1px);
-            background-size: 32px 32px;
-            pointer-events: none;
-        }
-
-        /* ── Layout ── */
-        .container {
-            position: relative; z-index: 1;
-            max-width: 1100px; margin: 0 auto;
-            padding: 32px 20px 60px;
-        }
-
-        /* ── Header ── */
-        header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 36px; flex-wrap: wrap; gap: 12px;
-        }
-        .header-left h1 {
-            font-family: 'Orbitron', monospace;
-            font-size: clamp(1.2rem, 4vw, 1.8rem);
-            font-weight: 900; letter-spacing: 4px;
-            color: var(--cyan);
-            text-shadow: 0 0 20px rgba(0,245,255,.4);
-        }
-        .header-left p {
-            font-size: .85rem; color: var(--text-muted);
-            letter-spacing: 2px; margin-top: 4px;
-        }
-        .back-btn {
-            padding: 10px 20px;
-            font-family: 'Orbitron', monospace; font-size: .75rem;
-            letter-spacing: 2px; text-decoration: none;
-            background: rgba(255,45,117,.15);
-            border: 1px solid var(--pink);
-            border-radius: 8px; color: var(--pink);
-            transition: all .3s;
-        }
-        .back-btn:hover { background: rgba(255,45,117,.28); }
-
-        /* ── Section title ── */
-        .section-title {
-            font-family: 'Orbitron', monospace;
-            font-size: .8rem; letter-spacing: 3px;
-            color: var(--cyan); text-transform: uppercase;
-            margin-bottom: 14px;
-            display: flex; align-items: center; gap: 10px;
-        }
-        .section-title::after {
-            content: ''; flex: 1; height: 1px;
-            background: linear-gradient(90deg, rgba(0,245,255,.3), transparent);
-        }
-
-        /* ── Summary cards ── */
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px; margin-bottom: 36px;
-        }
-        .summary-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px; padding: 18px 20px;
-            backdrop-filter: blur(12px);
-            transition: border-color .3s;
-        }
-        .summary-card:hover { border-color: rgba(0,245,255,.4); }
-        .summary-card .label {
-            font-size: .72rem; color: var(--text-muted);
-            letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
-        }
-        .summary-card .value {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.8rem; font-weight: 700;
-        }
-        .summary-card .unit {
-            font-size: .8rem; color: var(--text-muted); margin-left: 4px;
-        }
-        .summary-card.cyan  .value { color: var(--cyan); }
-        .summary-card.green .value { color: var(--green); }
-        .summary-card.pink  .value { color: var(--pink); }
-        .summary-card.yellow .value { color: var(--yellow); }
-
-        /* ── Chart grid ── */
-        .chart-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 18px; margin-bottom: 36px;
-        }
-        @media (max-width: 680px) { .chart-grid { grid-template-columns: 1fr; } }
-
-        .chart-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 14px; padding: 20px;
-            backdrop-filter: blur(12px);
-        }
-        .chart-card.wide {
-            grid-column: 1 / -1;
-        }
-        .chart-card h3 {
-            font-family: 'Orbitron', monospace;
-            font-size: .75rem; letter-spacing: 2px;
-            color: var(--text-muted); text-transform: uppercase;
-            margin-bottom: 16px;
-        }
-        .chart-wrap { position: relative; height: 220px; }
-        .chart-wrap.tall { height: 280px; }
-
-        /* ── Leaderboard table ── */
-        .table-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 14px; overflow: hidden;
-            backdrop-filter: blur(12px);
-            margin-bottom: 36px;
-        }
-        table { width: 100%; border-collapse: collapse; }
-        thead tr {
-            background: rgba(0,245,255,.06);
-            border-bottom: 1px solid var(--border);
-        }
-        th {
-            padding: 12px 16px;
-            font-family: 'Orbitron', monospace;
-            font-size: .68rem; letter-spacing: 2px;
-            color: var(--cyan); text-transform: uppercase;
-            text-align: left; font-weight: 400;
-        }
-        td {
-            padding: 11px 16px;
-            font-size: .92rem; border-bottom: 1px solid rgba(255,255,255,.05);
-        }
-        tbody tr:last-child td { border-bottom: none; }
-        tbody tr:hover { background: rgba(0,245,255,.04); }
-        .rank-1 td:first-child { color: var(--yellow); font-weight: 700; }
-        .rank-2 td:first-child { color: rgba(200,200,220,.8); }
-        .rank-3 td:first-child { color: #cd7f32; }
-        .badge {
-            display: inline-block; padding: 2px 8px;
-            border-radius: 4px; font-size: .72rem;
-            font-family: 'Orbitron', monospace; letter-spacing: 1px;
-        }
-        .badge-win  { background: rgba(0,255,136,.15); color: var(--green); border: 1px solid rgba(0,255,136,.3); }
-        .badge-good { background: rgba(0,245,255,.12); color: var(--cyan);  border: 1px solid rgba(0,245,255,.25); }
-        .badge-avg  { background: rgba(255,230,0,.1);  color: var(--yellow);border: 1px solid rgba(255,230,0,.2); }
-
-        /* ── Session history ── */
-        .history-list { display: flex; flex-direction: column; gap: 10px; }
-        .history-item {
-            background: var(--bg-card2);
-            border: 1px solid var(--border);
-            border-radius: 10px; padding: 14px 18px;
-            display: flex; align-items: center;
-            justify-content: space-between; flex-wrap: wrap; gap: 8px;
-            transition: border-color .2s;
-        }
-        .history-item:hover { border-color: rgba(0,245,255,.3); }
-        .history-meta { display: flex; flex-direction: column; gap: 2px; }
-        .history-meta .session-id {
-            font-family: 'Orbitron', monospace; font-size: .75rem;
-            color: var(--cyan); letter-spacing: 1px;
-        }
-        .history-meta .session-time {
-            font-size: .8rem; color: var(--text-muted);
-        }
-        .history-stats { display: flex; gap: 18px; flex-wrap: wrap; }
-        .history-stat { text-align: center; }
-        .history-stat .hs-val {
-            font-family: 'Orbitron', monospace; font-size: 1rem;
-            color: #fff; display: block;
-        }
-        .history-stat .hs-lbl {
-            font-size: .68rem; color: var(--text-muted);
-            text-transform: uppercase; letter-spacing: 1px;
-        }
-        .winner-tag {
-            font-family: 'Orbitron', monospace; font-size: .72rem;
-            padding: 4px 10px; border-radius: 6px;
-            background: rgba(0,255,136,.12); color: var(--green);
-            border: 1px solid rgba(0,255,136,.25);
-        }
-
-        /* ── Empty state ── */
-        .empty-state {
-            text-align: center; padding: 40px 20px;
-            color: var(--text-muted); font-size: .95rem;
-        }
-        .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; display: block; }
-
-        /* ── Improvement insight ── */
-        .insight-box {
-            background: linear-gradient(135deg, rgba(0,245,255,.06), rgba(0,255,136,.04));
-            border: 1px solid rgba(0,245,255,.2);
-            border-radius: 12px; padding: 18px 22px;
-            margin-bottom: 36px; display: flex; gap: 16px;
-            align-items: flex-start;
-        }
-        .insight-icon { font-size: 1.8rem; flex-shrink: 0; }
-        .insight-text h4 {
-            font-family: 'Orbitron', monospace; font-size: .8rem;
-            letter-spacing: 2px; color: var(--cyan); margin-bottom: 6px;
-        }
-        .insight-text p { font-size: .9rem; color: rgba(255,255,255,.7); line-height: 1.5; }
-        .insight-text .highlight { color: var(--green); font-weight: 700; }
+        :root { --bg:#08080e; --bg-card:rgba(14,14,26,.9); --bg-card2:rgba(20,20,36,.8); --border:rgba(0,245,255,.15); --cyan:#00f5ff; --pink:#ff2d75; --green:#00ff88; --yellow:#ffe600; --text-muted:rgba(255,255,255,.45); }
+        *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Rajdhani',sans-serif; background:var(--bg); color:#fff; min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; z-index:0; background-image:radial-gradient(rgba(0,245,255,.07) 1px,transparent 1px); background-size:32px 32px; pointer-events:none; }
+        .container { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:32px 20px 60px; }
+        header { display:flex; align-items:center; justify-content:space-between; margin-bottom:36px; flex-wrap:wrap; gap:12px; }
+        .header-left h1 { font-family:'Orbitron',monospace; font-size:clamp(1.2rem,4vw,1.8rem); font-weight:900; letter-spacing:4px; color:var(--cyan); text-shadow:0 0 20px rgba(0,245,255,.4); }
+        .header-left p { font-size:.85rem; color:var(--text-muted); letter-spacing:2px; margin-top:4px; }
+        .header-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .user-badge { font-family:'Orbitron',monospace; font-size:.72rem; padding:8px 14px; background:rgba(0,245,255,.08); border:1px solid var(--border); border-radius:8px; color:var(--cyan); }
+        .back-btn { padding:10px 20px; font-family:'Orbitron',monospace; font-size:.75rem; letter-spacing:2px; text-decoration:none; background:rgba(255,45,117,.15); border:1px solid var(--pink); border-radius:8px; color:var(--pink); transition:all .3s; }
+        .back-btn:hover { background:rgba(255,45,117,.28); }
+        /* Loading */
+        .loading-bar { height:3px; background:linear-gradient(90deg,var(--cyan),var(--green)); width:0; transition:width .4s; border-radius:2px; margin-bottom:32px; }
+        .ws-status { font-size:.75rem; padding:4px 10px; border-radius:4px; display:inline-block; margin-bottom:16px; }
+        .ws-status.connecting { background:rgba(255,230,0,.15); color:var(--yellow); border:1px solid rgba(255,230,0,.3); }
+        .ws-status.ok { background:rgba(0,255,136,.12); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+        .ws-status.err { background:rgba(255,45,117,.12); color:var(--pink); border:1px solid rgba(255,45,117,.3); }
+        /* Section */
+        .section-title { font-family:'Orbitron',monospace; font-size:.8rem; letter-spacing:3px; color:var(--cyan); text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+        .section-title::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,rgba(0,245,255,.3),transparent); }
+        /* Summary */
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:36px; }
+        .summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; backdrop-filter:blur(12px); transition:border-color .3s; }
+        .summary-card:hover { border-color:rgba(0,245,255,.4); }
+        .summary-card .label { font-size:.72rem; color:var(--text-muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+        .summary-card .value { font-family:'Orbitron',monospace; font-size:1.8rem; font-weight:700; }
+        .summary-card .unit { font-size:.8rem; color:var(--text-muted); margin-left:4px; }
+        .summary-card.cyan .value{color:var(--cyan);} .summary-card.green .value{color:var(--green);}
+        .summary-card.pink .value{color:var(--pink);} .summary-card.yellow .value{color:var(--yellow);}
+        /* Charts */
+        .chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:36px; }
+        @media(max-width:680px){.chart-grid{grid-template-columns:1fr;}}
+        .chart-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:20px; backdrop-filter:blur(12px); }
+        .chart-card.wide { grid-column:1/-1; }
+        .chart-card h3 { font-family:'Orbitron',monospace; font-size:.75rem; letter-spacing:2px; color:var(--text-muted); text-transform:uppercase; margin-bottom:16px; }
+        .chart-wrap { position:relative; height:220px; }
+        .chart-wrap.tall { height:280px; }
+        /* Table */
+        .table-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; overflow:hidden; backdrop-filter:blur(12px); margin-bottom:36px; }
+        table { width:100%; border-collapse:collapse; }
+        thead tr { background:rgba(0,245,255,.06); border-bottom:1px solid var(--border); }
+        th { padding:12px 16px; font-family:'Orbitron',monospace; font-size:.68rem; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; text-align:left; font-weight:400; }
+        td { padding:11px 16px; font-size:.92rem; border-bottom:1px solid rgba(255,255,255,.05); }
+        tbody tr:last-child td{border-bottom:none;} tbody tr:hover{background:rgba(0,245,255,.04);}
+        .rank-1 td:first-child{color:var(--yellow);font-weight:700;} .rank-2 td:first-child{color:rgba(200,200,220,.8);} .rank-3 td:first-child{color:#cd7f32;}
+        .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-family:'Orbitron',monospace;letter-spacing:1px;}
+        .badge-win{background:rgba(0,255,136,.15);color:var(--green);border:1px solid rgba(0,255,136,.3);}
+        .badge-good{background:rgba(0,245,255,.12);color:var(--cyan);border:1px solid rgba(0,245,255,.25);}
+        .badge-avg{background:rgba(255,230,0,.1);color:var(--yellow);border:1px solid rgba(255,230,0,.2);}
+        /* History */
+        .history-list{display:flex;flex-direction:column;gap:10px;}
+        .history-item{background:var(--bg-card2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;transition:border-color .2s;}
+        .history-item:hover{border-color:rgba(0,245,255,.3);}
+        .history-meta{display:flex;flex-direction:column;gap:2px;}
+        .history-meta .session-id{font-family:'Orbitron',monospace;font-size:.75rem;color:var(--cyan);letter-spacing:1px;}
+        .history-meta .session-time{font-size:.8rem;color:var(--text-muted);}
+        .history-stats{display:flex;gap:18px;flex-wrap:wrap;}
+        .history-stat{text-align:center;}
+        .history-stat .hs-val{font-family:'Orbitron',monospace;font-size:1rem;color:#fff;display:block;}
+        .history-stat .hs-lbl{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;}
+        .result-tag{font-family:'Orbitron',monospace;font-size:.72rem;padding:4px 10px;border-radius:6px;}
+        .result-tag.win{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.25);}
+        .result-tag.lose{background:rgba(255,45,117,.12);color:var(--pink);border:1px solid rgba(255,45,117,.25);}
+        /* Insight */
+        .insight-box{background:linear-gradient(135deg,rgba(0,245,255,.06),rgba(0,255,136,.04));border:1px solid rgba(0,245,255,.2);border-radius:12px;padding:18px 22px;margin-bottom:36px;display:flex;gap:16px;align-items:flex-start;}
+        .insight-icon{font-size:1.8rem;flex-shrink:0;}
+        .insight-text h4{font-family:'Orbitron',monospace;font-size:.8rem;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;}
+        .insight-text p{font-size:.9rem;color:rgba(255,255,255,.7);line-height:1.5;}
+        .insight-text .highlight{color:var(--green);font-weight:700;}
+        /* Empty */
+        .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:.95rem;}
+        .empty-state .icon{font-size:2.5rem;margin-bottom:10px;display:block;}
     </style>
 </head>
 <body>
 <div class="container">
-
-    <!-- Header -->
     <header>
         <div class="header-left">
             <h1>📊 DASHBOARD</h1>
             <p>REACTION DUEL — ANALISIS PERFORMA PEMAIN</p>
         </div>
-        <a href="index.html" class="back-btn">← MAIN GAME</a>
+        <div class="header-right">
+            <span class="user-badge" id="user-badge">...</span>
+            <a href="index.html" class="back-btn">← MAIN GAME</a>
+        </div>
     </header>
 
-    <!-- Summary Cards -->
-    <div class="section-title">Ringkasan</div>
-    <div class="summary-grid">
-        <div class="summary-card cyan">
-            <div class="label">Total Sesi</div>
-            <div class="value" id="sum-sessions">0</div>
+    <div class="loading-bar" id="loading-bar"></div>
+    <div id="ws-status" class="ws-status connecting">⏳ Menghubungi server...</div>
+
+    <div id="main-content">
+        <div class="section-title">Ringkasan</div>
+        <div class="summary-grid">
+            <div class="summary-card cyan"><div class="label">Total Sesi</div><div class="value" id="sum-sessions">—</div></div>
+            <div class="summary-card green"><div class="label">Rata-rata Reaksi</div><div class="value" id="sum-avg">—<span class="unit">ms</span></div></div>
+            <div class="summary-card pink"><div class="label">Reaksi Terbaik</div><div class="value" id="sum-best">—<span class="unit">ms</span></div></div>
+            <div class="summary-card yellow"><div class="label">Total Ronde (DB)</div><div class="value" id="sum-rounds">—</div></div>
         </div>
-        <div class="summary-card green">
-            <div class="label">Rata-rata Reaksi</div>
-            <div class="value" id="sum-avg">---<span class="unit">ms</span></div>
+
+        <div class="insight-box">
+            <div class="insight-icon">💡</div>
+            <div class="insight-text">
+                <h4>Analisis Peningkatan Skill</h4>
+                <p id="insight-text">Memuat analisis...</p>
+            </div>
         </div>
-        <div class="summary-card pink">
-            <div class="label">Reaksi Terbaik</div>
-            <div class="value" id="sum-best">---<span class="unit">ms</span></div>
+
+        <div class="section-title">Grafik Performa (Sumber: Database Server)</div>
+        <div class="chart-grid">
+            <div class="chart-card wide">
+                <h3>Tren Avg Reaction Time per Match</h3>
+                <div class="chart-wrap tall"><canvas id="chart-trend"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>Distribusi Reaction Time</h3>
+                <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>Konsistensi per Sesi (±ms)</h3>
+                <div class="chart-wrap"><canvas id="chart-consistency"></canvas></div>
+            </div>
         </div>
-        <div class="summary-card yellow">
-            <div class="label">Total Ronde</div>
-            <div class="value" id="sum-rounds">0</div>
+
+        <div class="section-title">Leaderboard (Sumber: Database Server)</div>
+        <div class="table-card" style="margin-bottom:36px">
+            <table>
+                <thead><tr><th>#</th><th>Nama Pemain</th><th>Skor Total</th><th>Avg Reaksi</th><th>Best</th><th>Games</th><th>Grade</th></tr></thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">⏳ Memuat dari server...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section-title">Riwayat Match Sesi Ini (Lokal)</div>
+        <div class="history-list" id="history-list">
+            <div class="empty-state"><span class="icon">📋</span>Riwayat muncul setelah bermain di sesi ini.</div>
         </div>
     </div>
-
-    <!-- Insight Box -->
-    <div class="insight-box" id="insight-box">
-        <div class="insight-icon">💡</div>
-        <div class="insight-text">
-            <h4>Analisis Peningkatan Skill</h4>
-            <p id="insight-text">Belum ada data permainan. Mulai bermain untuk melihat analisis peningkatan skill kamu!</p>
-        </div>
-    </div>
-
-    <!-- Charts -->
-    <div class="section-title">Grafik Performa</div>
-    <div class="chart-grid">
-        <div class="chart-card wide">
-            <h3>Tren Waktu Reaksi per Ronde (5 Ronde Terakhir per Sesi)</h3>
-            <div class="chart-wrap tall"><canvas id="chart-trend"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <h3>Distribusi Reaction Time</h3>
-            <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <h3>Konsistensi per Sesi</h3>
-            <div class="chart-wrap"><canvas id="chart-consistency"></canvas></div>
-        </div>
-    </div>
-
-    <!-- Leaderboard -->
-    <div class="section-title">Leaderboard</div>
-    <div class="table-card" style="margin-bottom:36px">
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Nama Pemain</th>
-                    <th>Skor Total</th>
-                    <th>Avg Reaksi</th>
-                    <th>Best</th>
-                    <th>Konsistensi</th>
-                    <th>Grade</th>
-                </tr>
-            </thead>
-            <tbody id="leaderboard-body">
-                <tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data</div></td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Session History -->
-    <div class="section-title">Riwayat Sesi</div>
-    <div class="history-list" id="history-list">
-        <div class="empty-state">
-            <span class="icon">📋</span>
-            Belum ada sesi permainan. Data akan muncul setelah menyelesaikan 1 game.
-        </div>
-    </div>
-
 </div>
 
 <script>
+// ============================================================
+//  KONFIGURASI
+// ============================================================
+const WS_URL      = 'wss://tester-game-part-2-production.up.railway.app';
+const STORAGE_KEY = 'reactionDuel_sessions';
 
+// Baca user yang sedang login dari sessionStorage (diisi oleh client.js saat login)
+const currentUser = JSON.parse(sessionStorage.getItem('rduel_current') || 'null');
+const myUsername  = currentUser?.username || '';
 
-const STORAGE_KEY  = 'reactionDuel_sessions';
-const WS_URL       = 'wss://tester-game-part-2-production.up.railway.app';
-    
-function getSessions() {
-    try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch { return []; }
+// Instans chart (untuk destroy sebelum rebuild)
+const charts = {};
+
+// ── Status UI ─────────────────────────────────────────────────
+function setStatus(text, cls) {
+    const el = document.getElementById('ws-status');
+    el.textContent = text; el.className = 'ws-status ' + cls;
+}
+function setProgress(pct) {
+    document.getElementById('loading-bar').style.width = pct + '%';
 }
 
-function saveSession(session) {
-    const sessions = getSessions();
-    sessions.unshift(session); // terbaru di atas
-    if (sessions.length > 50) sessions.pop(); // maksimal 50 sesi
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-}
-// ══════════════════════════════════════════════
-//  RENDER
-// ══════════════════════════════════════════════
-
-const sessions = getSessions();
-
-// ── Summary ──────────────────────────────────
-function renderSummary() {
-    const allTimes = sessions.flatMap(s =>
-        s.players.flatMap(p => p.reactionLog || [])
-    ).filter(Boolean);
-
-    document.getElementById('sum-sessions').textContent = sessions.length;
-    document.getElementById('sum-rounds').textContent   =
-        sessions.reduce((a, s) => a + (s.roundLog?.length || 0), 0);
-
-    if (allTimes.length) {
-        const avg  = allTimes.reduce((a,b)=>a+b,0) / allTimes.length;
-        const best = Math.min(...allTimes);
-        document.getElementById('sum-avg').innerHTML  = avg.toFixed(0)  + '<span class="unit">ms</span>';
-        document.getElementById('sum-best').innerHTML = best.toFixed(0) + '<span class="unit">ms</span>';
-    }
+// ── Render chart kosong ───────────────────────────────────────
+function emptyChart(id, msg = 'Belum ada data') {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    const el = document.getElementById(id);
+    if (el) el.parentElement.innerHTML =
+        `<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center"><span>${msg}</span></div>`;
 }
 
-// ── Insight ───────────────────────────────────
-function renderInsight() {
+// ============================================================
+//  WEBSOCKET — ambil leaderboard + player_stats via WS
+// ============================================================
+function loadFromServer() {
+    // Jika tidak login, leaderboard tetap dimuat, player stats dilewati
+    const badge = document.getElementById('user-badge');
+    badge.textContent = myUsername ? ('👤 ' + myUsername) : 'Guest';
+
+    setStatus('⏳ Menghubungi server...', 'connecting');
+    setProgress(10);
+
+    const ws = new WebSocket(WS_URL);
+    let lbDone    = false;
+    let statsDone = false;
+
+    // Timeout 8 detik
+    const timeout = setTimeout(() => {
+        if (!lbDone) {
+            document.getElementById('leaderboard-body').innerHTML =
+                '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--pink)">⚠️ Server tidak merespon. Coba refresh.</td></tr>';
+        }
+        setStatus('⚠️ Server timeout', 'err');
+        ws.close();
+        renderSessionHistory();
+        setProgress(100);
+    }, 8000);
+
+    ws.onopen = () => {
+        setStatus('✅ Terhubung ke server', 'ok');
+        setProgress(30);
+
+        // Minta leaderboard (tidak perlu login)
+        ws.send(JSON.stringify({ type: 'get_leaderboard' }));
+
+        // Minta player stats hanya jika login
+        if (myUsername) {
+            ws.send(JSON.stringify({ type: 'get_player_stats', username: myUsername }));
+        } else {
+            statsDone = true;
+            renderSummaryEmpty();
+            ['chart-trend','chart-dist','chart-consistency'].forEach(id =>
+                emptyChart(id, 'Login untuk melihat statistik pribadimu')
+            );
+            document.getElementById('insight-text').textContent =
+                'Login untuk melihat analisis peningkatan skill kamu!';
+        }
+    };
+
+    ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+
+        // ── Leaderboard response ──────────────────────────────
+        if (msg.type === 'leaderboard_data') {
+            lbDone = true;
+            setProgress(60);
+            renderLeaderboard(msg.data || []);
+
+            if (lbDone && statsDone) { clearTimeout(timeout); ws.close(); finalize(); }
+        }
+
+        // ── Player stats response ─────────────────────────────
+        if (msg.type === 'player_stats_data') {
+            statsDone = true;
+            setProgress(80);
+
+            const rounds = msg.data || [];
+            if (rounds.length > 0) {
+                renderSummary(rounds);
+                renderInsight(rounds);
+                buildTrendChart(rounds);
+                buildDistChart(rounds);
+                buildConsistencyChart(rounds);
+            } else {
+                renderSummaryEmpty();
+                ['chart-trend','chart-dist','chart-consistency'].forEach(id =>
+                    emptyChart(id, 'Selesaikan 1 game untuk melihat grafik')
+                );
+                document.getElementById('insight-text').textContent =
+                    'Selesaikan minimal 1 game untuk melihat analisis skill kamu!';
+            }
+
+            if (lbDone && statsDone) { clearTimeout(timeout); ws.close(); finalize(); }
+        }
+    };
+
+    ws.onerror = () => {
+        setStatus('❌ Gagal konek ke server', 'err');
+        document.getElementById('leaderboard-body').innerHTML =
+            '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--pink)">❌ Tidak bisa konek ke server. Cek koneksi internet kamu.</td></tr>';
+        clearTimeout(timeout);
+        renderSessionHistory();
+        setProgress(100);
+    };
+
+    ws.onclose = () => {
+        if (!lbDone) {
+            document.getElementById('leaderboard-body').innerHTML =
+                '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Koneksi ditutup. Refresh untuk mencoba lagi.</td></tr>';
+        }
+    };
+}
+
+function finalize() {
+    setStatus('✅ Data dimuat dari server', 'ok');
+    renderSessionHistory();
+    setProgress(100);
+    setTimeout(() => { document.getElementById('loading-bar').style.opacity = '0'; }, 700);
+}
+
+// ============================================================
+//  RENDER SUMMARY
+//  rounds = array baris dari round_logs (kolom: reaction_time, round_score, created_at, dll.)
+// ============================================================
+function renderSummary(rounds) {
+    if (!rounds || !rounds.length) { renderSummaryEmpty(); return; }
+
+    const times     = rounds.map(r => parseFloat(r.reaction_time)).filter(t => t > 0);
+    const totalSesi = Math.max(1, Math.ceil(rounds.length / 5));  // estimasi: 5 ronde = 1 game
+    const avg       = times.length ? (times.reduce((a,b)=>a+b,0)/times.length).toFixed(0) : null;
+    const best      = times.length ? Math.min(...times).toFixed(0) : null;
+
+    document.getElementById('sum-sessions').textContent  = totalSesi;
+    document.getElementById('sum-rounds').textContent    = rounds.length;
+    document.getElementById('sum-avg').innerHTML  = avg  ? `${avg}<span class="unit">ms</span>`  : '---';
+    document.getElementById('sum-best').innerHTML = best ? `${best}<span class="unit">ms</span>` : '---';
+}
+
+function renderSummaryEmpty() {
+    ['sum-sessions','sum-rounds'].forEach(id => document.getElementById(id).textContent = '0');
+    document.getElementById('sum-avg').innerHTML  = '---<span class="unit">ms</span>';
+    document.getElementById('sum-best').innerHTML = '---<span class="unit">ms</span>';
+}
+
+// ============================================================
+//  RENDER INSIGHT
+// ============================================================
+function renderInsight(rounds) {
     const el = document.getElementById('insight-text');
-    if (sessions.length < 2) return;
+    const times = rounds.map(r => parseFloat(r.reaction_time)).filter(t => t > 0);
 
-    // Ambil avg reaksi per sesi untuk pemain yang sama
-    const myName = sessions[sessions.length-1]?.players?.[0]?.username;
-    const myAvgs = sessions
-        .map(s => s.players.find(p => p.username === myName))
-        .filter(Boolean)
-        .map(p => p.avgTime)
-        .filter(Boolean)
-        .reverse(); // urut dari lama ke baru
-
-    if (myAvgs.length < 2) return;
-
-    const first = parseFloat(myAvgs[0]);
-    const last  = parseFloat(myAvgs[myAvgs.length - 1]);
-    const delta = first - last;
-    const pct   = ((delta / first) * 100).toFixed(1);
-
-    if (delta > 0) {
-        el.innerHTML = `Reaksi kamu <span class="highlight">lebih cepat ${delta.toFixed(0)}ms (${pct}%)</span> dibanding sesi pertama! Terus latihan untuk konsistensi yang lebih baik.`;
-    } else if (delta < 0) {
-        el.innerHTML = `Reaksi kamu sedikit melambat ${Math.abs(delta).toFixed(0)}ms dibanding sesi pertama. Istirahat sebentar lalu coba lagi!`;
-    } else {
-        el.innerHTML = `Reaksi kamu sangat konsisten! Pertahankan dan coba tingkatkan lagi.`;
-    }
-}
-
-// ── Leaderboard ─────────────────────────────
-// Ambil dari server via WebSocket → data dari database (sync semua device)
-// Fallback ke localStorage jika WebSocket gagal
-function renderLeaderboard() {
-    const tbody = document.getElementById('leaderboard-body');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:rgba(255,255,255,.4)">⏳ Memuat dari server...</td></tr>';
-
-    let gotResponse = false;
-
-    try {
-        const ws = new WebSocket(WS_URL);
-
-        ws.onopen = () => {
-            ws.send(JSON.stringify({ type: 'get_leaderboard' }));
-        };
-
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'leaderboard_data') {
-                gotResponse = true;
-                ws.close();
-
-                if (msg.data && msg.data.length > 0) {
-                    // Data dari database Railway
-                    const rows = msg.data.map(r => ({
-                        username:   r.username,
-                        totalScore: parseInt(r.total_score),
-                        avgTime:    r.avg_reaction_time ? parseFloat(r.avg_reaction_time).toFixed(0) : null,
-                        bestTime:   r.best_time         ? parseFloat(r.best_time).toFixed(0)         : null,
-                        consistency: null,
-                    }));
-                    _renderLeaderboardRows(rows);
-                } else {
-                    // DB kosong, fallback ke localStorage
-                    _renderLeaderboardFromLocal();
-                }
-            }
-        };
-
-        ws.onerror = () => { if (!gotResponse) _renderLeaderboardFromLocal(); };
-
-        // Timeout 5 detik jika server tidak respon
-        setTimeout(() => {
-            if (!gotResponse) {
-                ws.close();
-                _renderLeaderboardFromLocal();
-            }
-        }, 5000);
-
-    } catch(e) {
-        _renderLeaderboardFromLocal();
-    }
-}
-
-function _renderLeaderboardFromLocal() {
-    const playerMap = {};
-    sessions.forEach(s => {
-        s.players?.forEach(p => {
-            if (!playerMap[p.username]) {
-                playerMap[p.username] = { username: p.username, total_score: [], times: [], best_time: [] };
-            }
-            playerMap[p.username].total_score.push(p.total_score || 0);
-            if (p.avgTime)  playerMap[p.username].times.push(parseFloat(p.avgTime));
-            if (p.bestTime) playerMap[p.username].best_time.push(parseFloat(p.bestTime));
-        });
-    });
-    const rows = Object.values(playerMap).map(p => ({
-        username:    p.username,
-        totalScore:  p.total_score.reduce((a,b)=>a+b,0),
-        avgTime:     p.times.length ? (p.times.reduce((a,b)=>a+b,0)/p.times.length).toFixed(0) : null,
-        bestTime:    p.best_time.length ? Math.min(...p.best_time).toFixed(0) : null,
-        consistency: p.times.length > 1 ? (Math.max(...p.times)-Math.min(...p.times)).toFixed(0) : null,
-    })).sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
-    _renderLeaderboardRows(rows);
-}
-
-function _renderLeaderboardRows(rows) {
-    const tbody = document.getElementById('leaderboard-body');
-    if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data</div></td></tr>';
+    if (times.length < 10) {
+        el.textContent = 'Selesaikan minimal 2 game (10 ronde) untuk melihat analisis peningkatan skill!';
         return;
     }
-    tbody.innerHTML = rows.map((r, i) => {
-        const avg  = parseFloat(r.avgTime) || 9999;
+
+    // Bandingkan rata-rata 5 ronde pertama vs 5 ronde terakhir
+    const first5 = times.slice(0,5).reduce((a,b)=>a+b,0)/5;
+    const last5  = times.slice(-5).reduce((a,b)=>a+b,0)/5;
+    const delta  = first5 - last5;  // positif = makin cepat
+    const pct    = ((Math.abs(delta)/first5)*100).toFixed(1);
+
+    if (delta > 20) {
+        el.innerHTML = `Reaksi kamu <span class="highlight">lebih cepat ${delta.toFixed(0)}ms (${pct}%)</span> dibanding sesi awal. Terus tingkatkan!`;
+    } else if (delta < -20) {
+        el.textContent = `Reaksi kamu melambat ${Math.abs(delta).toFixed(0)}ms. Istirahat sebentar, lalu coba lagi!`;
+    } else {
+        el.innerHTML = `Reaksi kamu sangat <span class="highlight">konsisten</span>! Avg terkini ${last5.toFixed(0)}ms.`;
+    }
+}
+
+// ============================================================
+//  CHART SETUP
+// ============================================================
+Chart.defaults.color = 'rgba(255,255,255,.7)';
+Chart.defaults.font  = { family:'Rajdhani, sans-serif', size:11 };
+
+function baseOpts(extra = {}) {
+    return {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ font:{family:'Rajdhani,sans-serif',size:11}, boxWidth:12 } } },
+        scales:{
+            x:{ grid:{color:'rgba(255,255,255,.06)'}, ticks:{font:{family:'Rajdhani,sans-serif',size:10}} },
+            y:{ grid:{color:'rgba(255,255,255,.06)'}, ticks:{font:{family:'Rajdhani,sans-serif',size:10}} },
+        },
+        ...extra,
+    };
+}
+
+// Chart 1: Tren avg reaction time per match (setiap 5 ronde = 1 match)
+function buildTrendChart(rounds) {
+    const ctx = document.getElementById('chart-trend')?.getContext('2d');
+    if (!ctx || rounds.length < 5) { emptyChart('chart-trend','Butuh minimal 1 game (5 ronde)'); return; }
+
+    const matches = [];
+    for (let i = 0; i < rounds.length; i += 5) {
+        const chunk = rounds.slice(i, i+5);
+        const times = chunk.map(r => parseFloat(r.reaction_time)).filter(t => t > 0);
+        if (times.length) {
+            const avg  = times.reduce((a,b)=>a+b,0)/times.length;
+            const date = chunk[0]?.created_at
+                ? new Date(chunk[0].created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short'})
+                : '';
+            matches.push({ label:`M${matches.length+1} ${date}`, avg:parseFloat(avg.toFixed(0)) });
+        }
+    }
+
+    if (!matches.length) { emptyChart('chart-trend'); return; }
+    if (charts['chart-trend']) charts['chart-trend'].destroy();
+
+    charts['chart-trend'] = new Chart(ctx, {
+        type:'line',
+        data:{
+            labels: matches.map(m=>m.label),
+            datasets:[{
+                label:`${myUsername || 'Kamu'} — Avg Reaksi`,
+                data: matches.map(m=>m.avg),
+                borderColor:'#00f5ff', backgroundColor:'rgba(0,245,255,.1)',
+                tension:.4, pointRadius:5, borderWidth:2, fill:true, spanGaps:true,
+            }],
+        },
+        options:{
+            ...baseOpts(),
+            plugins:{ legend:{display:true}, tooltip:{callbacks:{label:c=>` Avg: ${c.raw}ms`}} },
+            scales:{
+                ...baseOpts().scales,
+                y:{ ...baseOpts().scales.y, suggestedMin:0,
+                    title:{display:true,text:'Avg Reaction (ms)',color:'rgba(255,255,255,.4)',font:{size:10}} },
+            },
+        },
+    });
+}
+
+// Chart 2: Distribusi reaction time (histogram per 100ms)
+function buildDistChart(rounds) {
+    const ctx = document.getElementById('chart-dist')?.getContext('2d');
+    if (!ctx) return;
+    const times = rounds.map(r => parseFloat(r.reaction_time)).filter(t => t > 0);
+    if (!times.length) { emptyChart('chart-dist'); return; }
+
+    const buckets = {};
+    times.forEach(t => { const b=Math.floor(t/100)*100; buckets[b]=(buckets[b]||0)+1; });
+    const sorted = Object.keys(buckets).sort((a,b)=>+a - +b);
+
+    if (charts['chart-dist']) charts['chart-dist'].destroy();
+    charts['chart-dist'] = new Chart(ctx, {
+        type:'bar',
+        data:{
+            labels: sorted.map(k=>`${k}–${+k+100}ms`),
+            datasets:[{
+                label:'Jumlah Ronde',
+                data: sorted.map(k=>buckets[k]),
+                backgroundColor:'rgba(0,245,255,.35)', borderColor:'#00f5ff', borderWidth:1, borderRadius:4,
+            }],
+        },
+        options: baseOpts({plugins:{legend:{display:false}}}),
+    });
+}
+
+// Chart 3: Konsistensi per sesi (max-min reaction_time tiap 5 ronde)
+function buildConsistencyChart(rounds) {
+    const ctx = document.getElementById('chart-consistency')?.getContext('2d');
+    if (!ctx) return;
+
+    const sessions = [];
+    for (let i=0; i<rounds.length; i+=5) {
+        const times = rounds.slice(i,i+5).map(r=>parseFloat(r.reaction_time)).filter(t=>t>0);
+        if (times.length >= 2) sessions.push(+(Math.max(...times)-Math.min(...times)).toFixed(0));
+    }
+
+    if (!sessions.length) { emptyChart('chart-consistency'); return; }
+    if (charts['chart-consistency']) charts['chart-consistency'].destroy();
+
+    charts['chart-consistency'] = new Chart(ctx, {
+        type:'bar',
+        data:{
+            labels: sessions.map((_,i)=>`Sesi ${i+1}`),
+            datasets:[{
+                label:'Selisih (ms)',
+                data: sessions,
+                backgroundColor: sessions.map(v=>v<100?'rgba(0,255,136,.4)':v<300?'rgba(255,230,0,.4)':'rgba(255,45,117,.4)'),
+                borderColor:     sessions.map(v=>v<100?'#00ff88':v<300?'#ffe600':'#ff2d75'),
+                borderWidth:1, borderRadius:4,
+            }],
+        },
+        options:{
+            ...baseOpts({plugins:{legend:{display:false}}}),
+            scales:{
+                ...baseOpts().scales,
+                y:{...baseOpts().scales.y,
+                   title:{display:true,text:'max-min (ms) — makin kecil = makin konsisten',color:'rgba(255,255,255,.4)',font:{size:10}}},
+            },
+        },
+    });
+}
+
+// ============================================================
+//  LEADERBOARD
+//  rows = data dari players_stats (kolom: username, total_score, avg_reaction_time, dll.)
+// ============================================================
+function renderLeaderboard(rows) {
+    const tbody = document.getElementById('leaderboard-body');
+    if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data leaderboard.</div></td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map((r,i) => {
+        const avg   = parseFloat(r.avg_reaction_time) || 9999;
         const grade = avg < 500 ? 'WIN' : avg < 900 ? 'GOOD' : 'AVG';
-        const badgeClass = grade === 'WIN' ? 'badge-win' : grade === 'GOOD' ? 'badge-good' : 'badge-avg';
-        const rankClass  = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
-        return `<tr class="${rankClass}">
-            <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}</td>
-            <td>${r.username}</td>
-            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.totalScore ?? r.total_score ?? 0}</td>
-            <td>${r.avgTime ? r.avgTime + ' ms' : '---'}</td>
-            <td style="color:var(--green)">${r.bestTime ? r.bestTime + ' ms' : '---'}</td>
-            <td>${r.consistency ? '±' + r.consistency + ' ms' : '---'}</td>
-            <td><span class="badge ${badgeClass}">${grade}</span></td>
+        const bc    = grade==='WIN'?'badge-win':grade==='GOOD'?'badge-good':'badge-avg';
+        const rc    = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
+        const rank  = i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1;
+        const isMe  = r.username === myUsername;
+        return `<tr class="${rc}" style="${isMe?'background:rgba(0,245,255,.06)':''}">
+            <td>${rank}</td>
+            <td>${isMe?`<strong style="color:var(--cyan)">${r.username} ★</strong>`:r.username}</td>
+            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${parseInt(r.total_score)||0}</td>
+            <td>${r.avg_reaction_time ? parseFloat(r.avg_reaction_time).toFixed(0)+' ms' : '---'}</td>
+            <td style="color:var(--green)">${r.best_time ? parseFloat(r.best_time).toFixed(0)+' ms' : '---'}</td>
+            <td>${r.games_played||0}</td>
+            <td><span class="badge ${bc}">${grade}</span></td>
         </tr>`;
     }).join('');
 }
 
-// ── Session History ────────────────────────────
-function renderHistory() {
+// ============================================================
+//  SESSION HISTORY — dari localStorage (data match sesi ini)
+//  Hanya sebagai riwayat cepat, data otoritatif ada di leaderboard DB
+// ============================================================
+function renderSessionHistory() {
     const el = document.getElementById('history-list');
-    if (!sessions.length) return;
+    let sessions = [];
+    try {
+        sessions = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');
+        if (myUsername) {
+            sessions = sessions.filter(s => s.players?.some(p=>p.username===myUsername));
+        }
+    } catch(e) {}
 
-    el.innerHTML = sessions.slice(0, 15).map(s => {
-        const winner   = s.players?.slice().sort((a,b)=>(b.score||0)-(a.score||0))[0];
-        const dt       = new Date(s.timestamp);
-        const timeStr  = dt.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
-                       + ' ' + dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
-        const rounds   = s.roundLog?.length || 0;
-        const avgAll   = s.players?.map(p=>p.avgTime).filter(Boolean).map(parseFloat);
-        const sessionAvg = avgAll?.length ? (avgAll.reduce((a,b)=>a+b,0)/avgAll.length).toFixed(0) : '---';
+    if (!sessions.length) {
+        el.innerHTML = '<div class="empty-state"><span class="icon">📋</span>Belum ada riwayat di sesi ini. Data lengkap ada di Leaderboard di atas.</div>';
+        return;
+    }
 
+    el.innerHTML = sessions.slice(0,10).map(s => {
+        const me     = s.players?.find(p=>p.username===myUsername);
+        const winner = s.players?.slice().sort((a,b)=>(b.score||0)-(a.score||0))[0];
+        const dt     = new Date(s.timestamp);
+        const timeStr= dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})
+                     + ' ' + dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+        const myAvg  = me?.avgTime  ? parseFloat(me.avgTime).toFixed(0)+'ms'  : '---';
+        const myBest = me?.bestTime ? parseFloat(me.bestTime).toFixed(0)+'ms' : '---';
+        const isWin  = winner?.username === myUsername;
         return `<div class="history-item">
             <div class="history-meta">
                 <span class="session-id">${s.id}</span>
                 <span class="session-time">${timeStr}</span>
             </div>
             <div class="history-stats">
-                <div class="history-stat">
-                    <span class="hs-val">${rounds}</span>
-                    <span class="hs-lbl">Ronde</span>
-                </div>
-                <div class="history-stat">
-                    <span class="hs-val">${s.players?.length || 0}</span>
-                    <span class="hs-lbl">Pemain</span>
-                </div>
-                <div class="history-stat">
-                    <span class="hs-val">${sessionAvg}ms</span>
-                    <span class="hs-lbl">Avg Reaksi</span>
-                </div>
+                <div class="history-stat"><span class="hs-val">${me?.score??0}</span><span class="hs-lbl">Skor</span></div>
+                <div class="history-stat"><span class="hs-val">${myAvg}</span><span class="hs-lbl">Avg</span></div>
+                <div class="history-stat"><span class="hs-val">${myBest}</span><span class="hs-lbl">Best</span></div>
+                <div class="history-stat"><span class="hs-val">${s.roundLog?.length||0}</span><span class="hs-lbl">Ronde</span></div>
             </div>
-            ${winner ? `<span class="winner-tag">🏆 ${winner.username}</span>` : ''}
+            <span class="result-tag ${isWin?'win':'lose'}">${isWin?'🏆 MENANG':'💀 KALAH'}</span>
         </div>`;
     }).join('');
 }
 
-// ── Charts ─────────────────────────────────────
-const chartDefaults = {
-    color: 'rgba(255,255,255,.7)',
-    font: { family: 'Rajdhani, sans-serif', size: 11 },
-};
-Chart.defaults.color = chartDefaults.color;
-Chart.defaults.font  = chartDefaults.font;
-
-function makeChartOptions(extra = {}) {
-    return {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { font: { family:'Rajdhani,sans-serif', size:11 }, boxWidth:12 } } },
-        scales: {
-            x: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
-            y: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
-        },
-        ...extra,
-    };
-}
-
-// Chart 1: Tren avg reaction time per sesi (up to 8 sesi terakhir)
-// Sebelumnya pakai r.time dari roundLog, tapi field itu tidak ada.
-// Sekarang pakai avgTime per player per sesi — data yang benar-benar tersedia.
-function buildTrendChart() {
-    const ctx = document.getElementById('chart-trend').getContext('2d');
-    if (!sessions.length) { renderEmptyChart(ctx, 'chart-trend'); return; }
-
-    // Ambil semua username unik dari semua sesi (maks 4 untuk keterbacaan)
-    const allUsers = [...new Set(
-        sessions.flatMap(s => s.players?.map(p => p.username) || [])
-    )].slice(0, 4);
-
-    const recent = sessions.slice(0, 8).reverse(); // urut lama → baru
-    const colors  = ['#00f5ff', '#ff2d75', '#00ff88', '#ffe600', '#ff8c00'];
-
-    const datasets = allUsers.map((username, i) => ({
-        label: username,
-        data: recent.map(s => {
-            const p = s.players?.find(pl => pl.username === username);
-            return p?.avgTime ? parseFloat(p.avgTime) : null;
-        }),
-        borderColor:     colors[i],
-        backgroundColor: colors[i] + '22',
-        tension: .4, pointRadius: 5,
-        borderWidth: 2, fill: false,
-        spanGaps: true,
-    })).filter(d => d.data.some(v => v !== null)); // buang dataset yang kosong
-
-    if (!datasets.length) { renderEmptyChart(ctx, 'chart-trend'); return; }
-
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: recent.map((_, i) => `Sesi ${i + 1}`),
-            datasets,
-        },
-        options: {
-            ...makeChartOptions(),
-            plugins: {
-                legend: { display: true, labels: { font: { family: 'Rajdhani,sans-serif', size: 11 }, boxWidth: 12 } },
-                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.raw}ms` } },
-            },
-            scales: {
-                ...makeChartOptions().scales,
-                y: {
-                    ...makeChartOptions().scales.y,
-                    title: { display: true, text: 'Avg Reaksi (ms)', color: 'rgba(255,255,255,.4)', font: { size: 10 } }
-                }
-            }
-        }
-    });
-}
-
-// Chart 2: Distribusi reaction time (bar histogram)
-function buildDistChart() {
-    const ctx = document.getElementById('chart-dist').getContext('2d');
-    const allTimes = sessions.flatMap(s =>
-        s.players?.flatMap(p => p.reactionLog || []) || []
-    ).filter(Boolean).map(Number);
-
-    if (!allTimes.length) { renderEmptyChart(ctx,'chart-dist'); return; }
-
-    // Bucket per 50ms: 100-150, 150-200, ...
-    const buckets = {};
-    allTimes.forEach(t => {
-        const bucket = Math.floor(t / 50) * 50;
-        buckets[bucket] = (buckets[bucket] || 0) + 1;
-    });
-    const sorted = Object.keys(buckets).sort((a,b)=>a-b);
-
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: sorted.map(k => `${k}-${+k+50}ms`),
-            datasets: [{
-                label: 'Jumlah klik',
-                data: sorted.map(k => buckets[k]),
-                backgroundColor: 'rgba(0,245,255,.35)',
-                borderColor: '#00f5ff',
-                borderWidth: 1, borderRadius: 4,
-            }]
-        },
-        options: makeChartOptions({ plugins:{ legend:{ display:false } } }),
-    });
-}
-
-// Chart 3: Konsistensi per sesi (lower = better)
-function buildConsistencyChart() {
-    const ctx = document.getElementById('chart-consistency').getContext('2d');
-    const data = sessions.slice(0,10).reverse().map((s,i) => {
-        const myPlayer = s.players?.[0];
-        return { x: `S${i+1}`, y: myPlayer?.consistency ? parseFloat(myPlayer.consistency) : null };
-    }).filter(d=>d.y !== null);
-
-    if (!data.length) { renderEmptyChart(ctx,'chart-consistency'); return; }
-
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: data.map(d=>d.x),
-            datasets: [{
-                label: 'Konsistensi (ms)',
-                data: data.map(d=>d.y),
-                backgroundColor: data.map(d =>
-                    d.y < 50 ? 'rgba(0,255,136,.4)' : d.y < 100 ? 'rgba(255,230,0,.4)' : 'rgba(255,45,117,.4)'
-                ),
-                borderColor: data.map(d =>
-                    d.y < 50 ? '#00ff88' : d.y < 100 ? '#ffe600' : '#ff2d75'
-                ),
-                borderWidth: 1, borderRadius: 4,
-            }]
-        },
-        options: {
-            ...makeChartOptions({ plugins:{ legend:{ display:false } } }),
-            scales: {
-                ...makeChartOptions().scales,
-                y: { ...makeChartOptions().scales.y,
-                    title: { display:true, text:'Selisih (ms) — lebih kecil lebih baik',
-                             color:'rgba(255,255,255,.4)', font:{size:10} }
-                }
-            }
-        }
-    });
-}
-
-function renderEmptyChart(ctx, id) {
-    ctx.canvas.parentElement.innerHTML =
-        '<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center">' +
-        '<span>Belum ada data</span></div>';
-}
-
-// ── Init ──────────────────────────────────────
-renderSummary();
-renderInsight();
-renderLeaderboard(); // async, will update when done
-renderHistory();
-buildTrendChart();
-buildDistChart();
-buildConsistencyChart();
-
-// Untuk testing: tambah data dummy jika localStorage kosong
-if (!sessions.length) {
-    document.getElementById('insight-text').textContent =
-        'Selesaikan minimal 1 game untuk melihat analisis peningkatan skill kamu!';
-}
+// ── START ─────────────────────────────────────────────────────
+loadFromServer();
 </script>
 </body>
 </html>
