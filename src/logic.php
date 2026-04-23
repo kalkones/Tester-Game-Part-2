@@ -797,9 +797,9 @@ class Logic implements MessageComponentInterface {
         return $level;
     }
 
-    // =========================================================
+    // ======================================
     //  HELPERS
-    // =========================================================
+    // =============================================
     /** Kirim ke SEMUA client (lobby global: chat, player list) */
     private function broadcastLobby(array $payload): void {
         $json = $this->encode($payload);
