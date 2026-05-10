@@ -223,11 +223,17 @@
 //  Semua data ditarik dari server via WebSocket
 // ============================================================
 
-// ── 1. Environment-Agnostic WebSocket Connection ──────────
+// 1. Deteksi protokol (selalu gunakan wss:// jika diakses dari GitHub Pages yang pakai HTTPS)
 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-const wsHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-    ? 'localhost:8080' 
-    : window.location.host; 
+
+// 2. Domain Public Railway Anda (Backend)
+const railwayDomain = 'tester-game-part-2-production.up.railway.app'; 
+
+// 3. Logika pintar: Jika dibuka di laptop sendiri, pakai localhost. Jika dibuka lewat GitHub, tembak ke Railway!
+const wsHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'localhost:8080'
+    : railwayDomain;
+
 const socket = new WebSocket(protocol + wsHost);
 
 // ── State: data diisi dari response server ────────────────
