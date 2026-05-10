@@ -32,48 +32,18 @@ const ICON_UNLOCKS = {
     15:{icon:'fa-fire',name:'Inferno'}, 20:{icon:'fa-crown',name:'Legend'}
 };
 
-function getLevelData(totalXP, serverLevel = null) {
-    let currentLevel = 1, currentLevelXP = 0, nextXP = 200;
-    
-    // 1. Jika ada level resmi dari server, gunakan itu sebagai patokan utama
-    if (serverLevel !== null && serverLevel !== undefined) {
-        currentLevel = serverLevel;
-        
-        // Cari batas bawah dan batas atas XP untuk level ini dari tabel
-        let levelRow = LEVEL_TABLE.find(row => row[0] === serverLevel);
-        if (levelRow) {
-            currentLevelXP = levelRow[1];
-            let nextRow = LEVEL_TABLE.find(row => row[0] === serverLevel + 1);
-            nextXP = nextRow ? nextRow[1] : currentLevelXP; // Jika max level
-        }
-        
-        // Jika XP yang dipunya kurang dari syarat level, kita tambal / sinkronkan
-        // (Ini menambal bug dimana database bilang Lv 2, tapi JS bilang XP masih 0)
-        if (totalXP < currentLevelXP) {
-            totalXP = currentLevelXP; 
-        }
-    } 
-    // 2. Jika tidak ada data server (misal saat nambah XP pas menang), hitung manual
-    else {
-        for (let i = 0; i < LEVEL_TABLE.length; i++) {
-            if (totalXP >= LEVEL_TABLE[i][1]) {
-                currentLevel = LEVEL_TABLE[i][0]; 
-                currentLevelXP = LEVEL_TABLE[i][1];
-                nextXP = (i + 1 < LEVEL_TABLE.length) ? LEVEL_TABLE[i + 1][1] : LEVEL_TABLE[i][1];
-            } else break;
-        }
+function getLevelData(totalXP) {
+    let currentLevel=1, nextXP=0, currentLevelXP=0;
+    for (let i=0; i<LEVEL_TABLE.length; i++) {
+        if (totalXP >= LEVEL_TABLE[i][1]) {
+            currentLevel=LEVEL_TABLE[i][0]; currentLevelXP=LEVEL_TABLE[i][1];
+            nextXP = (i+1<LEVEL_TABLE.length) ? LEVEL_TABLE[i+1][1] : LEVEL_TABLE[i][1];
+        } else break;
     }
-
     const progressXP = totalXP - currentLevelXP;
     const neededXP   = Math.max(1, nextXP - currentLevelXP);
-    
-    return { 
-        level: currentLevel, 
-        currentXP: totalXP, 
-        progressXP: progressXP, 
-        neededXP: neededXP,
-        progressPercent: (progressXP / neededXP) * 100 
-    };
+    return { level:currentLevel, currentXP:totalXP, progressXP, neededXP,
+             progressPercent:(progressXP/neededXP)*100 };
 }
 
 // ── DOM Elements ──────────────────────────────────────────────
@@ -130,7 +100,7 @@ function showScreen(name) {
 }
 
 // ============================================================
-//  AUTH — Gunakan WebSocket ke server
+//  AUTH — Gunakan WebSocket ke server, HAPUS localStorage
 // ============================================================
 const Auth = {
     login: () => {
@@ -138,6 +108,7 @@ const Auth = {
         const pass = els.passInput?.value;
         if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi username/email dan password!"; return; }
         if (!socket || socket.readyState !== WebSocket.OPEN) {
+            // Koneksi dulu, lalu login
             Network.connect(() => Auth.sendLogin(id, pass));
         } else {
             Auth.sendLogin(id, pass);
@@ -151,9 +122,9 @@ const Auth = {
         const id   = els.idInput?.value.trim();
         const pass = els.passInput?.value;
         if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi semua field!"; return; }
-        const isEmail  = id.includes('@');
-        const username = isEmail ? id.split('@')[0] : id;
-        const email    = isEmail ? id : '';
+        const isEmail    = id.includes('@');
+        const username   = isEmail ? id.split('@')[0] : id;
+        const email      = isEmail ? id : '';
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             Network.connect(() => Network.send({ type: 'AUTH_REGISTER', username, email, password: pass }));
         } else {
@@ -169,6 +140,7 @@ const Auth = {
         AppState.isLoggedIn = true;
         sessionStorage.setItem('rduel_current', JSON.stringify(guestUser));
         Auth.onSuccess();
+        // Guest: koneksi WebSocket untuk chat & matchmaking
         Network.connect();
     },
     onSuccess: () => {
@@ -210,6 +182,7 @@ const Network = {
         socket.onopen = () => {
             console.log("[WS] Terhubung ke server!");
             if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
+            // Kirim JOIN ke server agar masuk player list
             if (AppState.user) {
                 Network.send({
                     type:    'JOIN',
@@ -250,7 +223,6 @@ const Network = {
         switch (msg.type) {
 
             // Auth
-            // Auth
             case 'AUTH_RESULT':
                 if (msg.success) {
                     AppState.user = msg.user;
@@ -258,15 +230,14 @@ const Network = {
                     AppState.isLoggedIn = true;
                     sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
                     Auth.onSuccess();
-                    Network.send({
-                        type:    'JOIN',
-                        username: AppState.user.username,
-                        icon:    AppState.user.icon || 'fa-user',
-                        isGuest: false
-                    });
+                    // FIX#4: JOIN was not sent after AUTH_RESULT — send it now
+                    Network.send({ type:'JOIN', username:msg.user.username, icon:msg.user.icon||'fa-user', isGuest:false });
+                    // Request leaderboard for lobby panel
+                    Network.send({ type: 'get_leaderboard' });
+                    showTutorial();
                 } else {
                     if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnLogin)   { els.btnLogin.textContent = "LOG IN"; els.btnLogin.disabled = false; }
+                    if(els.btnLogin)   { els.btnLogin.textContent = "LOGIN"; els.btnLogin.disabled = false; }
                 }
                 break;
 
@@ -277,16 +248,14 @@ const Network = {
                     AppState.isLoggedIn = true;
                     sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
                     Auth.onSuccess();
-                    Network.send({
-                        type:    'JOIN',
-                        username: AppState.user.username,
-                        icon:    AppState.user.icon || 'fa-user',
-                        isGuest: false
-                    });
-                    
+                    // FIX#4: send JOIN after register
+                    Network.send({ type:'JOIN', username:msg.user.username, icon:msg.user.icon||'fa-user', isGuest:false });
+                    Network.send({ type: 'get_leaderboard' });
+                    // FIX#11: show tutorial for new account
+                    if (typeof showTutorial === 'function') showTutorial();
                 } else {
                     if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnRegister) { els.btnRegister.textContent = "CREATE NEW ACCOUNT"; els.btnRegister.disabled = false; }
+                    if(els.btnRegister) { els.btnRegister.textContent = "DAFTAR"; els.btnRegister.disabled = false; }
                 }
                 break;
 
@@ -296,7 +265,7 @@ const Network = {
                 break;
 
             case 'CHAT_MESSAGE':
-                UI.appendChat(msg.username, msg.message);
+                UI.appendChat(msg.username, msg.message, msg.time);
                 break;
 
             // Matchmaking
@@ -310,6 +279,7 @@ const Network = {
 
             case 'PLAYER_READY_UPDATE':
                 if (msg.username !== AppState.user?.username) {
+                    // Lawan sudah ready
                     if(els.readyStatusOpp) els.readyStatusOpp.className = 'status-dot ready';
                     if(els.readyTextOpp)   els.readyTextOpp.textContent = "READY!";
                 }
@@ -325,22 +295,15 @@ const Network = {
                 if(els.roundInd) els.roundInd.textContent = `MATCH ${msg.round} / 5`;
                 break;
 
-            // FIX BUG: Handle pesan WAIT dari server
-            case 'WAIT':
-                AppState.isGameActive = false; // item belum spawn, jangan terima klik
-                if(els.gameArea)  els.gameArea.className  = 'state-wait';
-                if(els.msgMain)   els.msgMain.textContent = `ROUND ${AppState.currentRound}`;
-                if(els.msgSub)    els.msgSub.textContent  = "Get Ready...";
-                if(els.msgMain)   els.msgMain.style.color = 'var(--accent-cyan)';
-                break;
-
             // ── SPAWN_ITEMS: server kirim daftar item ──────────
             case 'SPAWN_ITEMS':
+                // msg.items = [{id, type, top, left, duration, round}, ...]
                 Game.renderItems(msg.items, msg.round);
                 break;
 
             // ── ITEM_EXPIRED: server kasih tau item sudah mati ─
             case 'ITEM_EXPIRED':
+                // msg.itemId, msg.resetCombo
                 Game.removeItemEl(msg.itemId);
                 if (msg.resetCombo) {
                     AppState.myCombo = 0;
@@ -351,23 +314,25 @@ const Network = {
 
             // ── SCORE_UPDATE: skor resmi dari server ───────────
             case 'SCORE_UPDATE':
+                // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
                 Game.onScoreUpdate(msg);
                 break;
 
             // ── ROUND_RESULT: hasil akhir ronde ────────────────
             case 'ROUND_RESULT':
+                // msg = { roundWinner, scores: {playerA, playerB} }
                 Game.onRoundResult(msg);
                 break;
 
             // Game Over
             case 'GAME_OVER':
-                // FIX: terima roundLog dari server, kirim ke dashboard via localStorage
-                Game.onGameOver(msg.stats, msg.roundLog || []);
+                Game.onGameOver(msg.stats);
                 break;
 
             // Leaderboard
             case 'leaderboard_data':
                 UI.renderLeaderboard(msg.data);
+                UI.renderLobbyLeaderboard(msg.data);
                 break;
 
             case 'SYSTEM':
@@ -400,12 +365,7 @@ const UI = {
             if(els.xpBarContainer) els.xpBarContainer.style.display = "none";
         } else {
             if(els.xpBarContainer) els.xpBarContainer.style.display = "block";
-            // KITA KIRIM JUGA DATA LEVEL DARI SERVER (AppState.user.level)
-            const d = getLevelData(AppState.user.totalXP || 0, AppState.user.level); 
-            
-            // Simpan kembali XP yang sudah disinkronkan ke dalam AppState agar tidak hilang
-            AppState.user.totalXP = d.currentXP; 
-            
+            const d = getLevelData(AppState.user.totalXP || 0);
             if(els.displayLvl) els.displayLvl.innerHTML = `Lvl ${d.level} <span>${d.progressXP.toFixed(0)} / ${d.neededXP.toFixed(0)} XP</span>`;
             if(els.xpFill)     els.xpFill.style.width = `${d.progressPercent}%`;
         }
@@ -415,8 +375,8 @@ const UI = {
         if (!els.playerList) return;
         els.playerList.innerHTML = players.map(p =>
             `<div style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center;">
-                <span><i class="fas ${p.icon||'fa-user'}" style="margin-right:8px; color:var(--accent-cyan)"></i>${p.name}</span>
-                <span style="color:var(--accent-yellow); font-size:0.85rem;">${p.isGuest ? 'Guest' : `Lv.${p.level||1}`}</span>
+                <span><i class="fas ${p.icon||'fa-user'}" style="margin-right:8px; color:var(--teal, var(--accent-cyan))"></i>${p.name}</span>
+                <span style="color:var(--gold, var(--accent-yellow)); font-size:0.85rem;">${p.isGuest ? 'Guest' : `Lv.${p.level||1}`}</span>
              </div>`
         ).join('');
     },
@@ -431,7 +391,22 @@ const UI = {
     },
 
     renderLeaderboard: (rows) => {
-        console.log('[LB]', rows);
+        // FIX#8: actually render to lobby leaderboard panel
+        const el = document.getElementById('leaderboard-mini');
+        if (!el) return;
+        if (!rows || !rows.length) {
+            el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:16px;">Belum ada data</div>';
+            return;
+        }
+        const medals = ['🥇','🥈','🥉'];
+        el.innerHTML = rows.slice(0,4).map((r,i) => {
+            const isMe = r.username === AppState.user?.username;
+            return `<div class="lb-row${isMe?' lb-me':''}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:${isMe?'#EDE7F6':'var(--bg)'};margin-bottom:6px;border:1.5px solid ${isMe?'#D1C4E9':'var(--border)'}">
+                <span style="font-family:'Press Start 2P',monospace;font-size:10px;width:22px;text-align:center">${medals[i]||i+1}</span>
+                <span style="font-size:12px;font-weight:700;flex:1">${r.username}</span>
+                <span style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--blue)">${r.total_score??r.totalScore??0}</span>
+            </div>`;
+        }).join('');
     },
 
     toggleProfile: () => {
@@ -457,13 +432,11 @@ const UI = {
             const unlocked = d.level >= lvl;
             if (unlocked) {
                 div.innerHTML = `<i class="fas ${data.icon}" style="font-size:1.5rem;"></i>`;
-                if (AppState.user.icon === data.icon) {
-                    div.style.background  = "rgba(0,245,255,0.2)";
-                    div.style.boxShadow   = "0 0 10px var(--accent-cyan)";
-                }
+                if (AppState.user.icon === data.icon) { div.style.background = "rgba(0,245,255,0.2)"; div.style.boxShadow = "0 0 10px var(--accent-cyan)"; }
                 div.onclick = () => {
                     AppState.user.icon = data.icon;
                     sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
+                    // Kirim update icon ke server
                     Network.send({ type: 'UPDATE_ICON', username: AppState.user.username, icon: data.icon });
                     UI.updateProfileUI();
                     UI.initIconPicker();
@@ -479,29 +452,21 @@ const UI = {
     showResultModal: (stats) => {
         if (!els.resModal) return;
         const me = stats?.find(p => p.username === AppState.user?.username);
-        if(els.resScore) els.resScore.textContent = me?.score    ?? AppState.myScore;
-        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime  ? `${me.avgTime}ms` : (AppState.myAvgReaction || '---');
-        if(els.resBest)  els.resBest.textContent  = me?.bestTime ? `${me.bestTime}ms` : (AppState.myBestReaction || '---');
+        if(els.resScore) els.resScore.textContent = me?.score       ?? AppState.myScore;
+        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime     ?? AppState.myAvgReaction;
+        if(els.resBest)  els.resBest.textContent  = me?.bestTime    ?? AppState.myBestReaction;
+        if(els.resMode)  els.resMode.textContent  = "Match Finished";
 
-        // Tentukan menang/kalah berdasarkan urutan stats (sudah di-sort desc oleh server)
-        const isWin = stats?.[0]?.username === AppState.user?.username;
-        if(els.resMode) {
-            els.resMode.textContent = isWin ? "VICTORY! 🏆" : "DEFEAT";
-            els.resMode.style.color = isWin ? "var(--accent-green)" : "var(--accent-pink)";
-        }
-
-        // XP
-        if (!AppState.isGuest && me) {
-            const xpGained  = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
+        // XP (dihitung berdasarkan hasil dari server)
+        if(!AppState.isGuest && me) {
+            const isWin   = stats[0]?.username === AppState.user.username;
+            const xpGained = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
             const oldLevel  = getLevelData(AppState.user.totalXP || 0).level;
             AppState.user.totalXP = (AppState.user.totalXP || 0) + xpGained;
-            const newLevel  = getLevelData(AppState.user.totalXP).level;
+            const newLevel = getLevelData(AppState.user.totalXP).level;
             AppState.user.level = newLevel;
             sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
-            if(els.resXP) {
-                els.resXP.textContent = `+${xpGained} XP`;
-                els.resXP.style.color = isWin ? "var(--accent-green)" : "#888";
-            }
+            if(els.resXP) { els.resXP.textContent = `+${xpGained} XP`; els.resXP.style.color = isWin ? "var(--accent-green)" : "#888"; }
             UI.updateProfileUI();
             if (newLevel > oldLevel) {
                 if(els.msgSub) { els.msgSub.innerHTML = `LEVEL UP! Lv.${newLevel}`; els.msgSub.style.color = "var(--accent-yellow)"; }
@@ -512,30 +477,14 @@ const UI = {
         els.resModal.style.display = 'flex';
     },
 
-    // FIX BUG: UI.retryGame tidak ada sebelumnya → tombol PLAY AGAIN crash
-    retryGame: () => {
-        // Tutup modal
-        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
-        // Reset state lokal
-        AppState.isGameActive   = false;
-        AppState.myScore        = 0;
-        AppState.opponentScore  = 0;
-        AppState.myCombo        = 0;
-        AppState.activeItemEls  = {};
-        if(els.trashContainer) els.trashContainer.innerHTML = '';
-        // Kembali ke lobby dulu, lalu langsung cari match baru
-        showScreen('lobby');
-        UI.updateProfileUI();
-        UI.initIconPicker();
-        // Cari lawan baru otomatis
-        setTimeout(() => Game.startMatch(), 300);
+    triggerLevelUpAnimation: () => {
+        if(els.displayLvl) { els.displayLvl.classList.add('level-up-anim'); setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600); }
     },
 
-    triggerLevelUpAnimation: () => {
-        if(els.displayLvl) {
-            els.displayLvl.classList.add('level-up-anim');
-            setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600);
-        }
+    // FIX#6: retryGame — called from result modal "Play Again" button
+    retryGame: () => {
+        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
+        Game.startMatch();
     }
 };
 
@@ -561,12 +510,7 @@ const Game = {
         if(els.msgMain)   els.msgMain.textContent  = "SEARCHING";
         if(els.msgSub)    els.msgSub.textContent   = "Finding an opponent...";
 
-        // Reset score display
-        if(els.statScore) els.statScore.textContent = '0';
-        if(els.statAvg)   els.statAvg.textContent   = '---';
-        if(els.statBest)  els.statBest.textContent  = '---';
-        if(els.comboDisplay) els.comboDisplay.classList.remove('show');
-
+        // Kirim ke server — server yang cari lawan
         Network.send({ type: 'FIND_MATCH', username: AppState.user?.username });
     },
 
@@ -578,14 +522,13 @@ const Game = {
         if(els.readyStatusOpp) els.readyStatusOpp.className  = 'status-dot';
         if(els.readyTextOpp)   els.readyTextOpp.textContent  = "WAITING...";
         if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = false; els.btnReadyConfirm.textContent = "I AM READY"; }
-        if(els.msgMain)   els.msgMain.textContent = "MATCH FOUND!";
-        if(els.msgSub)    els.msgSub.textContent  = `vs ${opponentName}`;
     },
 
     confirmReady: () => {
         if(els.readyStatusMe)  els.readyStatusMe.className  = 'status-dot waiting';
         if(els.readyTextMe)    els.readyTextMe.textContent  = "WAITING OPPONENT...";
         if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = true; els.btnReadyConfirm.textContent = "READY"; }
+        // Kirim ke server
         Network.send({ type: 'PLAYER_READY', username: AppState.user?.username });
     },
 
@@ -598,13 +541,14 @@ const Game = {
     },
 
     // ── RENDER ITEMS dari server ──────────────────────────────
+    // Tidak ada random di sini! Semua data dari server
     renderItems: (items, round) => {
         if (!els.trashContainer) return;
         AppState.isGameActive = true;
         AppState.roundStartTime = performance.now();
-        if(els.gameArea) els.gameArea.className = 'state-go';
-        if(els.msgMain)  els.msgMain.textContent = '';
-        if(els.msgSub)   els.msgSub.textContent  = '';
+        els.gameArea.className = 'state-go';
+        if(els.msgMain) els.msgMain.textContent = '';
+        if(els.msgSub)  els.msgSub.textContent  = '';
         els.trashContainer.innerHTML = '';
         AppState.activeItemEls = {};
 
@@ -614,6 +558,7 @@ const Game = {
     },
 
     createItemEl: (item, round) => {
+        // item = { id, type, top, left, duration }
         const el = document.createElement('div');
         el.className = `trash-item ${item.type}`;
         el.style.top  = item.top  + '%';
@@ -626,7 +571,7 @@ const Game = {
 
         el.innerHTML = `<i class="fas ${iconClass}"></i><div class="trash-timer"><div class="timer-fill" style="color:${color}"></div></div>`;
 
-        // Animasi gerak (visual )
+        // Animasi gerak (visual only, tidak mempengaruhi logic)
         if (round >= 3) {
             const sf = (round - 2) * 0.5;
             el.style.setProperty('--dx', `${(Math.random()-0.5)*80*sf}px`);
@@ -648,7 +593,7 @@ const Game = {
                 type:      'ITEM_CLICKED',
                 itemId:    item.id,
                 username:  AppState.user?.username,
-                clickTime: Date.now()
+                clickTime: Date.now() // timestamp untuk perhitungan latency di server
             });
 
             // 3. Feedback visual instan (BUKAN skor — hanya animasi)
@@ -662,14 +607,16 @@ const Game = {
             }
         };
 
-        // Timer visual (animasi bar )
+        // Timer visual (hanya animasi bar — tidak berhubungan dengan expiry server)
+        // FIX#7: store interval ref on element so removeItemEl can clear it
         const timerFill = el.querySelector('.timer-fill');
         const startTime = performance.now();
-        const interval  = setInterval(() => {
+        const interval = setInterval(() => {
             const pct = 100 - ((performance.now() - startTime) / item.duration * 100);
             if (timerFill) timerFill.style.transform = `scaleX(${Math.max(0, pct/100)})`;
-            if (pct <= 0)  clearInterval(interval);
+            if (pct <= 0) clearInterval(interval);
         }, 16);
+        el._timerInterval = interval; // FIX#7: store ref
 
         AppState.activeItemEls[item.id] = el;
         els.trashContainer.appendChild(el);
@@ -677,20 +624,24 @@ const Game = {
 
     removeItemEl: (itemId) => {
         const el = AppState.activeItemEls[itemId];
-        if (el && el.parentNode) {
-            el.parentNode.removeChild(el);
+        if (el) {
+            // FIX#7: clear timer interval to prevent memory/CPU leak
+            if (el._timerInterval) clearInterval(el._timerInterval);
+            if (el.parentNode) el.parentNode.removeChild(el);
         }
         delete AppState.activeItemEls[itemId];
     },
 
     // ── Terima skor resmi dari server ────────────────────────
     onScoreUpdate: (msg) => {
+        // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
         AppState.myScore       = msg.myScore       ?? AppState.myScore;
         AppState.opponentScore = msg.opponentScore ?? AppState.opponentScore;
         AppState.myCombo       = msg.myCombo       ?? AppState.myCombo;
         if (msg.myAvgReaction)  AppState.myAvgReaction  = msg.myAvgReaction;
         if (msg.myBestReaction) AppState.myBestReaction = msg.myBestReaction;
 
+        // Update UI
         if(els.statScore) els.statScore.textContent = AppState.myScore;
         if(els.statAvg)   els.statAvg.textContent   = AppState.myAvgReaction;
         if(els.statBest)  els.statBest.textContent  = AppState.myBestReaction;
@@ -703,67 +654,52 @@ const Game = {
     },
 
     onRoundResult: (msg) => {
-        const didIWin = msg.roundWinner === AppState.user?.username;
+        // Tampilkan siapa yang menang ronde ini
         if(els.msgMain) {
-            els.msgMain.textContent = didIWin ? "ROUND WIN!" : "ROUND LOST";
-            els.msgMain.style.color = didIWin ? "var(--accent-green)" : "var(--accent-red)";
-        }
-        if(els.msgSub) {
-            // Tampilkan skor kedua pemain
-            const myScore  = msg.scores?.[AppState.user?.username] ?? 0;
-            const entries  = Object.entries(msg.scores ?? {});
-            const oppEntry = entries.find(([u]) => u !== AppState.user?.username);
-            const oppScore = oppEntry ? oppEntry[1] : 0;
-            els.msgSub.textContent = `You: ${myScore} — Opp: ${oppScore}`;
-            els.msgSub.style.color = '#fff';
+            els.msgMain.textContent = msg.roundWinner === AppState.user?.username ? "ROUND WIN!" : "ROUND LOST";
+            els.msgMain.style.color = msg.roundWinner === AppState.user?.username ? "var(--accent-green)" : "var(--accent-red)";
         }
     },
 
-    onGameOver: (stats, roundLog = []) => {
+    onGameOver: (stats) => {
         AppState.isGameActive = false;
         if(els.gameArea) els.gameArea.className = 'state-wait';
         if(els.msgMain)  els.msgMain.textContent = "FINISH";
         if(els.trashContainer) els.trashContainer.innerHTML = '';
         AppState.activeItemEls = {};
-
-        // ── SIMPAN SESI LANGSUNG KE localStorage ──────────────
-
-        try {
-            const STORAGE_KEY = 'reactionDuel_sessions';
-            const session = {
-                id:        'S' + Date.now(),
-                timestamp: new Date().toISOString(),
-                players:   stats,    // {username, score, avgTime, bestTime, consistency, reactionLog, ...}
-                roundLog:  roundLog, // [{round, winner, scores}, ...]
-            };
-            const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            existing.unshift(session);
-            if (existing.length > 50) existing.pop();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
-            console.log('[SESSION] Sesi tersimpan:', session.id);
-        } catch (e) {
-            console.warn('[SESSION] Gagal simpan sesi:', e);
-        }
-
         UI.showResultModal(stats);
     },
 
     showFeedback: (text, color, isPositive) => {
-        if(els.msgSub)  { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
+        if(els.msgSub) { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
         if(els.msgMain) { els.msgMain.textContent = isPositive ? "HIT!" : "OUCH!"; els.msgMain.style.color = color; }
     },
 
     backToLobby: () => {
         if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
-        AppState.isGameActive   = false;
-        AppState.myScore        = 0;
-        AppState.opponentScore  = 0;
-        AppState.myCombo        = 0;
-        AppState.activeItemEls  = {};
-        if(els.trashContainer) els.trashContainer.innerHTML = '';
         showScreen('lobby');
         UI.updateProfileUI();
         UI.initIconPicker();
+        // Request leaderboard refresh
+        Network.send({ type: 'get_leaderboard' });
+    },
+
+    // FIX#5: VS AI mode — simulate game locally against bot
+    startVsAI: (difficulty = 'easy') => {
+        showScreen('game');
+        AppState.isGameActive = false;
+        AppState.myScore = 0;
+        AppState.activeItemEls = {};
+
+        if(els.gameArea)  els.gameArea.className = 'state-wait';
+        if(els.readyRoom) els.readyRoom.classList.remove('active');
+        if(els.roundInd)  els.roundInd.textContent = 'ROUND 1 / 5';
+        if(els.modeInd)   els.modeInd.textContent  = difficulty === 'easy' ? 'VS AI (EASY)' : 'VS AI (HARD)';
+        if(els.msgMain)   els.msgMain.textContent  = 'VS AI';
+        if(els.msgSub)    els.msgSub.textContent   = difficulty === 'easy' ? 'Easy Mode — Reaksi AI ~600ms' : 'Hard Mode — Reaksi AI ~250ms';
+
+        // Tell server we're in solo/AI mode — server still spawns items
+        Network.send({ type: 'FIND_MATCH', username: AppState.user?.username, mode: 'ai', difficulty });
     }
 };
 
@@ -775,6 +711,7 @@ const Chat = {
         if (e.key !== 'Enter' || !els.chatInput) return;
         const msg = els.chatInput.value.trim();
         if (!msg) return;
+        // Kirim ke server — server yang broadcast ke semua
         Network.send({ type: 'CHAT', username: AppState.user?.username, message: msg });
         els.chatInput.value = '';
     }
