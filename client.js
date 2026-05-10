@@ -40,13 +40,16 @@ const ICON_UNLOCKS = {
     20: { icon: 'fa-crown', name: 'Legend' }
 };
 
-// Jika web diakses via HTTPS (seperti di Railway), gunakan WSS. Jika lokal, gunakan WS.
+// 1. Deteksi protokol (selalu gunakan wss:// jika diakses dari GitHub Pages yang pakai HTTPS)
 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 
-// Deteksi host otomatis untuk mode lokal vs produksi
-const wsHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+// 2. Domain Public Railway Anda (Backend)
+const railwayDomain = 'tester-game-part-2-production.up.railway.app'; 
+
+// 3. Logika pintar: Jika dibuka di laptop sendiri, pakai localhost. Jika dibuka lewat GitHub, tembak ke Railway!
+const wsHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'localhost:8080'
-    : window.location.host;
+    : railwayDomain;
 
 const socket = new WebSocket(protocol + wsHost);
 
