@@ -143,62 +143,97 @@ function updateUserInDB(user) {
 }
 
 const Auth = {
+
+    // [FIX LOGIN] - Kirim kredensial ke server via WebSocket, bukan verifikasi localStorage
     login: () => {
-        const id = els.idInput.value.trim();
+        const id   = els.idInput.value.trim();
         const pass = els.passInput.value;
-        if (!id || !pass) { els.loginError.textContent = "Mohon isi Username/Email dan Password!"; return; }
-        const user = findUser(id);
-        if (user && user.password === pass) {
-            AppState.user = user; AppState.isGuest = false; AppState.isLoggedIn = true;
-            saveCurrentUser(AppState.user);
-            Auth.onSuccess();
-        } else { els.loginError.textContent = "Akun tidak ditemukan atau password salah."; }
-    },
-    register: () => {
-        const id = els.idInput.value.trim();
-        const pass = els.passInput.value;
-        if (!id || !pass) { els.loginError.textContent = "Mohon isi semua field!"; return; }
-        const existing = findUser(id);
-        if (existing) { els.loginError.textContent = "Username atau Email sudah terdaftar!"; return; }
-        const isEmail = id.includes('@');
-        const displayUsername = isEmail ? id.split('@')[0] : id;
-        const newUser = { 
-            username: displayUsername, email: isEmail ? id : '', password: pass, 
-            level: 1, icon: 'fa-user', gamesPlayed: 0, totalXP: 0, bestTime: null 
+        if (!id || !pass) {
+            els.loginError.textContent = "Mohon isi Username/Email dan Password!";
+            return;
+        }
+        els.loginError.textContent = "Menghubungkan...";
+        Network.connect();
+        // Tunggu socket terbuka, lalu kirim AUTH_LOGIN
+        const tryLogin = () => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'AUTH_LOGIN', identifier: id, password: pass }));
+                els.loginError.textContent = "";
+            } else if (socket.readyState === WebSocket.CONNECTING) {
+                setTimeout(tryLogin, 100); // retry tiap 100ms sampai terbuka
+            } else {
+                els.loginError.textContent = "Gagal terhubung ke server.";
+            }
         };
-        const users = getLocalStorageUsers();
-        users[displayUsername] = newUser; 
-        saveLocalStorageUsers(users);
-        AppState.user = newUser; AppState.isGuest = false; AppState.isLoggedIn = true;
-        saveCurrentUser(AppState.user); 
-        Auth.onSuccess();
+        tryLogin();
     },
+
+    // [FIX REGISTER] - Kirim data registrasi ke server via WebSocket
+    register: () => {
+        const id   = els.idInput.value.trim();
+        const pass = els.passInput.value;
+        if (!id || !pass) {
+            els.loginError.textContent = "Mohon isi semua field!";
+            return;
+        }
+        const isEmail  = id.includes('@');
+        const username = isEmail ? id.split('@')[0] : id;
+        const email    = isEmail ? id : '';
+
+        els.loginError.textContent = "Menghubungkan...";
+        Network.connect();
+        // Tunggu socket terbuka, lalu kirim AUTH_REGISTER
+        const tryRegister = () => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'AUTH_REGISTER', username: username, email: email, password: pass
+                }));
+                els.loginError.textContent = "";
+            } else if (socket.readyState === WebSocket.CONNECTING) {
+                setTimeout(tryRegister, 100);
+            } else {
+                els.loginError.textContent = "Gagal terhubung ke server.";
+            }
+        };
+        tryRegister();
+    },
+
     loginGuest: () => {
-        const randomId = Math.floor(Math.random() * 10000);
-        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost' };
+        const randomId  = Math.floor(Math.random() * 10000);
+        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost', level: 1, totalXP: 0 };
         AppState.user = guestUser; AppState.isGuest = true; AppState.isLoggedIn = true;
-        saveCurrentUser(AppState.user); 
+        saveCurrentUser(AppState.user);
         Auth.onSuccess();
     },
+
     onSuccess: () => {
         els.loginError.textContent = "";
         showScreen('lobby');
+        // [FIX RENDER LEVEL] - Panggil UI render SETELAH AppState.user sudah terisi
+        //                      level & totalXP dari server, agar badge level tampil benar
         UI.updateProfileUI();
-        UI.initIconPicker(); 
-        Network.connect();
+        UI.initIconPicker();
+        // [FIX CHAT TRIGGER] - Kirim JOIN; server akan membalas dengan chat history 20 pesan
+        Network.joinLobby();
     },
+
     checkSession: () => {
         const user = getCurrentUser();
         if (user) {
             AppState.user = user; AppState.isLoggedIn = true; AppState.isGuest = (user.type === 'guest');
             showScreen('lobby');
             UI.updateProfileUI();
-            UI.initIconPicker(); 
+            UI.initIconPicker();
             Network.connect();
-        } else { showScreen('login'); }
+            // Delay kecil agar socket sempat terbuka sebelum JOIN dikirim
+            setTimeout(Network.joinLobby, 300);
+        } else {
+            showScreen('login');
+        }
     },
+
     logout: () => {
-        clearCurrentUser(); if(socket) socket.close(); location.reload();
+        clearCurrentUser(); if (socket) socket.close(); location.reload();
     }
 };
 
@@ -301,23 +336,140 @@ const UI = {
 };
 
 const Network = {
+
+    // [FIX LOGIN] - Ganti stub dengan koneksi WebSocket nyata.
     connect: () => {
-        if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
-        setTimeout(() => {
-            Network.handlePlayerList([
-                {username: 'ProGamer99', score: 2500},
-                {username: 'Speedy', score: 1800}
-            ]);
-        }, 1000);
+        // Guard: jangan buat koneksi baru jika sudah terbuka atau sedang connecting
+        if (socket && (socket.readyState === WebSocket.OPEN ||
+                       socket.readyState === WebSocket.CONNECTING)) return;
+
+        socket = new WebSocket(SERVER_URL);
+        if (els.serverStatus) els.serverStatus.textContent = "CONNECTING...";
+
+        socket.onopen = () => {
+            if (els.serverStatus) els.serverStatus.textContent = "ONLINE";
+            console.log("[WS] Terhubung ke server.");
+        };
+
+        // [FIX LOGIN] - Handler terpusat untuk semua pesan masuk dari server
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                Network.handleMessage(data);
+            } catch (e) {
+                console.error("[WS] Gagal parse pesan:", e);
+            }
+        };
+
+        socket.onclose = () => {
+            if (els.serverStatus) els.serverStatus.textContent = "OFFLINE";
+            console.warn("[WS] Koneksi tertutup.");
+        };
+
+        socket.onerror = () => {
+            if (els.loginError) els.loginError.textContent = "Tidak dapat terhubung ke server.";
+        };
     },
+
+    // [FIX LOGIN] - Router pesan: arahkan setiap type ke handler yang tepat
+    handleMessage: (data) => {
+        switch (data.type) {
+            case 'AUTH_RESULT':     Network.onAuthResult(data);           break;
+            case 'REGISTER_RESULT': Network.onRegisterResult(data);       break;
+            case 'PLAYER_LIST':     Network.handlePlayerList(data.players); break;
+            case 'CHAT_MESSAGE':    Network.handleChatMessage(data);      break;
+            case 'ERROR':
+                console.warn("[SERVER ERROR]", data.message);
+                if (els.loginError) els.loginError.textContent = data.message;
+                break;
+            // Pesan game — akan dihandle oleh Game object nanti
+            case 'MATCH_FOUND': case 'MATCH_SEARCHING': case 'START_GAME':
+            case 'ROUND_UPDATE': case 'SPAWN_ITEMS': case 'SCORE_UPDATE':
+            case 'ROUND_RESULT': case 'ITEM_EXPIRED': case 'GAME_OVER':
+            case 'SYSTEM': case 'WAIT':
+                console.log("[GAME MSG]", data.type, data);
+                break;
+            default:
+                console.log("[WS] Unhandled type:", data.type);
+        }
+    },
+
+    // [FIX LOGIN] - Proses AUTH_RESULT: simpan level & XP dari server ke AppState
+    onAuthResult: (data) => {
+        if (data.success) {
+            AppState.user         = data.user;
+            // [FIX RENDER LEVEL] - Tangkap nilai level dan totalXP yang dikirim server
+            AppState.user.level   = data.user.level   ?? 1;
+            AppState.user.totalXP = data.user.totalXP ?? 0;
+            AppState.isGuest      = false;
+            AppState.isLoggedIn   = true;
+            saveCurrentUser(AppState.user);
+            Auth.onSuccess();
+        } else {
+            if (els.loginError) els.loginError.textContent = data.message || "Login gagal.";
+        }
+    },
+
+    // [FIX REGISTER] - Proses REGISTER_RESULT: simpan level=1 & totalXP=0 dari server
+    onRegisterResult: (data) => {
+        if (data.success) {
+            AppState.user         = data.user;
+            // [FIX RENDER LEVEL] - Level & XP awal akun baru langsung dari server
+            AppState.user.level   = data.user.level   ?? 1;
+            AppState.user.totalXP = data.user.totalXP ?? 0;
+            AppState.isGuest      = false;
+            AppState.isLoggedIn   = true;
+            saveCurrentUser(AppState.user);
+            Auth.onSuccess();
+        } else {
+            if (els.loginError) els.loginError.textContent = data.message || "Registrasi gagal.";
+        }
+    },
+
+    // [FIX CHAT TRIGGER] - Render pesan chat (berlaku untuk history maupun pesan baru)
+    handleChatMessage: (data) => {
+        if (!els.chatBox) return;
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        div.innerHTML =
+            `<strong>${data.username}:</strong> ` +
+            `<span>${data.message}</span> ` +
+            `<span style="color:#555;font-size:0.75rem">${data.time}</span>`;
+        els.chatBox.appendChild(div);
+        els.chatBox.scrollTop = els.chatBox.scrollHeight;
+    },
+
     handlePlayerList: (players) => {
-        if(!els.playerList) return;
-        els.playerList.innerHTML = players.map(p => 
-            `<div class="player-list-item" style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1)">
-                <span>${p.username}</span> <span style="color:var(--accent-yellow)">${p.score} pts</span>
+        if (!els.playerList) return;
+        els.playerList.innerHTML = (players || []).map(p =>
+            `<div class="player-list-item" style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+                <span>${p.name || p.username}</span>
+                <span style="color:var(--accent-yellow)">${p.score || 0} pts</span>
+                <span style="color:var(--accent-cyan);font-size:0.75rem">Lv.${p.level || 1}</span>
              </div>`
         ).join('');
-    }
+    },
+
+    // [FIX CHAT TRIGGER] - Daftarkan player ke lobby; server akan reply dengan chat history
+    joinLobby: () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify({
+            type:     'JOIN',
+            username: AppState.user.username,
+            icon:     AppState.user.icon    ?? 'fa-user',
+            isGuest:  AppState.isGuest,
+            level:    AppState.user.level   ?? 1,
+        }));
+    },
+
+    // Helper pengiriman pesan umum
+    send: (payload) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(payload));
+        } else {
+            console.warn("[WS] Socket belum siap, pesan tidak terkirim:", payload);
+        }
+    },
 };
 
 const Game = {
@@ -557,6 +709,8 @@ const Chat = {
                 div.className = 'chat-msg';
                 div.innerHTML = `<strong>${AppState.user.username}:</strong> ${msg}`;
                 els.chatBox.appendChild(div); els.chatBox.scrollTop = els.chatBox.scrollHeight;
+                els.chatInput.value = '';
+                Network.send({ type: 'CHAT', username: AppState.user.username, message: msg });
                 els.chatInput.value = '';
             }
         }
