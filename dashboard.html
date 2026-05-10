@@ -5,109 +5,255 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard — Reaction Duel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg:          #F0F4F8;
-            --surface:     #FFFFFF;
-            --border:      #D1D9E6;
-            --teal:        #00BFA5;
-            --teal-light:  #E0F7FA;
-            --blue:        #2196F3;
-            --blue-light:  #E3F2FD;
-            --purple:      #7C4DFF;
-            --purple-light:#EDE7F6;
-            --gold:        #FFA000;
-            --green:       #43A047;
-            --red:         #E53935;
-            --text:        #1A237E;
-            --text2:       #5C6BC0;
-            --text3:       #9FA8DA;
+            --bg:          #08080e;
+            --bg-card:     rgba(14,14,26,.9);
+            --bg-card2:    rgba(20,20,36,.8);
+            --border:      rgba(0,245,255,.15);
+            --cyan:        #00f5ff;
+            --pink:        #ff2d75;
+            --green:       #00ff88;
+            --yellow:      #ffe600;
+            --orange:      #ff8c00;
+            --text-muted:  rgba(255,255,255,.45);
         }
+
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: 'Exo 2', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        body::before { content: ''; position: fixed; inset: 0; z-index: 0; background-image: linear-gradient(rgba(0,191,165,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,191,165,.04) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
 
-        .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 30px 20px 60px; }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
 
-        header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; flex-wrap: wrap; gap: 12px; }
-        .header-left h1 { font-size: 1.5rem; font-weight: 900; color: var(--teal); letter-spacing: 3px; }
-        .header-left p { font-size: 11px; color: var(--text3); letter-spacing: 2px; margin-top: 4px; }
-        .back-btn { padding: 10px 20px; font-size: 11px; font-weight: 700; text-decoration: none; background: var(--teal); color: #fff; border-radius: 10px; transition: all .2s; }
-        .back-btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        /* ── Dot grid background ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background-image: radial-gradient(rgba(0,245,255,.07) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+        }
 
-        .section-title { font-size: 12px; font-weight: 800; color: var(--teal); text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; letter-spacing: 2px; }
-        .section-title::after { content: ''; flex: 1; height: 2px; background: linear-gradient(90deg, var(--teal), transparent); }
+        /* ── Layout ── */
+        .container {
+            position: relative; z-index: 1;
+            max-width: 1100px; margin: 0 auto;
+            padding: 32px 20px 60px;
+        }
 
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 30px; }
-        .summary-card { background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 18px 20px; transition: all .3s; }
-        .summary-card:hover { border-color: var(--teal); transform: translateY(-2px); }
-        .summary-card .label { font-size: 11px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-        .summary-card .value { font-size: 1.8rem; font-weight: 800; }
-        .summary-card .unit { font-size: 12px; color: var(--text3); margin-left: 4px; }
-        .summary-card.cyan .value { color: var(--teal); }
+        /* ── Header ── */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 36px; flex-wrap: wrap; gap: 12px;
+        }
+        .header-left h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: clamp(1.2rem, 4vw, 1.8rem);
+            font-weight: 900; letter-spacing: 4px;
+            color: var(--cyan);
+            text-shadow: 0 0 20px rgba(0,245,255,.4);
+        }
+        .header-left p {
+            font-size: .85rem; color: var(--text-muted);
+            letter-spacing: 2px; margin-top: 4px;
+        }
+        .back-btn {
+            padding: 10px 20px;
+            font-family: 'Orbitron', monospace; font-size: .75rem;
+            letter-spacing: 2px; text-decoration: none;
+            background: rgba(255,45,117,.15);
+            border: 1px solid var(--pink);
+            border-radius: 8px; color: var(--pink);
+            transition: all .3s;
+        }
+        .back-btn:hover { background: rgba(255,45,117,.28); }
+
+        /* ── Section title ── */
+        .section-title {
+            font-family: 'Orbitron', monospace;
+            font-size: .8rem; letter-spacing: 3px;
+            color: var(--cyan); text-transform: uppercase;
+            margin-bottom: 14px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-title::after {
+            content: ''; flex: 1; height: 1px;
+            background: linear-gradient(90deg, rgba(0,245,255,.3), transparent);
+        }
+
+        /* ── Summary cards ── */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px; margin-bottom: 36px;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px; padding: 18px 20px;
+            backdrop-filter: blur(12px);
+            transition: border-color .3s;
+        }
+        .summary-card:hover { border-color: rgba(0,245,255,.4); }
+        .summary-card .label {
+            font-size: .72rem; color: var(--text-muted);
+            letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
+        }
+        .summary-card .value {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem; font-weight: 700;
+        }
+        .summary-card .unit {
+            font-size: .8rem; color: var(--text-muted); margin-left: 4px;
+        }
+        .summary-card.cyan  .value { color: var(--cyan); }
         .summary-card.green .value { color: var(--green); }
-        .summary-card.pink .value { color: var(--red); }
-        .summary-card.yellow .value { color: var(--gold); }
+        .summary-card.pink  .value { color: var(--pink); }
+        .summary-card.yellow .value { color: var(--yellow); }
 
-        .insight-box { background: linear-gradient(135deg, rgba(0,191,165,.08), rgba(67,160,71,.04)); border: 2px solid rgba(0,191,165,.3); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start; }
-        .insight-icon { font-size: 1.4rem; }
-        .insight-text h4 { font-size: 12px; font-weight: 800; color: var(--teal); margin-bottom: 6px; letter-spacing: 1px; }
-        .insight-text p { font-size: 13px; color: var(--text2); line-height: 1.5; }
-        .highlight { color: var(--green); font-weight: 800; }
+        /* ── Chart grid ── */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px; margin-bottom: 36px;
+        }
+        @media (max-width: 680px) { .chart-grid { grid-template-columns: 1fr; } }
 
-        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 30px; }
-        @media (max-width: 768px) { .chart-grid { grid-template-columns: 1fr; } }
-
-        .chart-card { background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 20px; }
-        .chart-card.wide { grid-column: 1 / -1; }
-        .chart-card h3 { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; margin-bottom: 16px; letter-spacing: 1px; }
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px; padding: 20px;
+            backdrop-filter: blur(12px);
+        }
+        .chart-card.wide {
+            grid-column: 1 / -1;
+        }
+        .chart-card h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: .75rem; letter-spacing: 2px;
+            color: var(--text-muted); text-transform: uppercase;
+            margin-bottom: 16px;
+        }
         .chart-wrap { position: relative; height: 220px; }
         .chart-wrap.tall { height: 280px; }
 
-        .table-card { background: var(--surface); border: 2px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 30px; }
+        /* ── Leaderboard table ── */
+        .table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden;
+            backdrop-filter: blur(12px);
+            margin-bottom: 36px;
+        }
         table { width: 100%; border-collapse: collapse; }
-        thead tr { background: var(--teal-light); border-bottom: 2px solid var(--border); }
-        th { padding: 12px 16px; font-size: 11px; letter-spacing: 1px; color: var(--teal); text-transform: uppercase; text-align: left; font-weight: 700; }
-        td { padding: 11px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+        thead tr {
+            background: rgba(0,245,255,.06);
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            padding: 12px 16px;
+            font-family: 'Orbitron', monospace;
+            font-size: .68rem; letter-spacing: 2px;
+            color: var(--cyan); text-transform: uppercase;
+            text-align: left; font-weight: 400;
+        }
+        td {
+            padding: 11px 16px;
+            font-size: .92rem; border-bottom: 1px solid rgba(255,255,255,.05);
+        }
         tbody tr:last-child td { border-bottom: none; }
-        tbody tr:hover { background: var(--teal-light); }
-        .rank-1 td:first-child { color: var(--gold); font-weight: 800; }
-        .rank-2 td:first-child { color: #78909C; font-weight: 700; }
-        .rank-3 td:first-child { color: #A1887F; font-weight: 700; }
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
-        .badge-win { background: rgba(67,160,71,.15); color: var(--green); border: 1px solid rgba(67,160,71,.3); }
-        .badge-good { background: rgba(0,191,165,.12); color: var(--teal); border: 1px solid rgba(0,191,165,.25); }
-        .badge-avg { background: rgba(255,160,0,.1); color: var(--gold); border: 1px solid rgba(255,160,0,.2); }
+        tbody tr:hover { background: rgba(0,245,255,.04); }
+        .rank-1 td:first-child { color: var(--yellow); font-weight: 700; }
+        .rank-2 td:first-child { color: rgba(200,200,220,.8); }
+        .rank-3 td:first-child { color: #cd7f32; }
+        .badge {
+            display: inline-block; padding: 2px 8px;
+            border-radius: 4px; font-size: .72rem;
+            font-family: 'Orbitron', monospace; letter-spacing: 1px;
+        }
+        .badge-win  { background: rgba(0,255,136,.15); color: var(--green); border: 1px solid rgba(0,255,136,.3); }
+        .badge-good { background: rgba(0,245,255,.12); color: var(--cyan);  border: 1px solid rgba(0,245,255,.25); }
+        .badge-avg  { background: rgba(255,230,0,.1);  color: var(--yellow);border: 1px solid rgba(255,230,0,.2); }
 
+        /* ── Session history ── */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
-        .history-item { background: var(--surface); border: 2px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; transition: all .2s; }
-        .history-item:hover { border-color: var(--teal); }
-        .history-meta { display: flex; flex-direction: column; gap: 3px; }
-        .session-id { font-size: 12px; color: var(--teal); letter-spacing: 1px; font-weight: 700; }
-        .session-time { font-size: 11px; color: var(--text3); }
+        .history-item {
+            background: var(--bg-card2);
+            border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 18px;
+            display: flex; align-items: center;
+            justify-content: space-between; flex-wrap: wrap; gap: 8px;
+            transition: border-color .2s;
+        }
+        .history-item:hover { border-color: rgba(0,245,255,.3); }
+        .history-meta { display: flex; flex-direction: column; gap: 2px; }
+        .history-meta .session-id {
+            font-family: 'Orbitron', monospace; font-size: .75rem;
+            color: var(--cyan); letter-spacing: 1px;
+        }
+        .history-meta .session-time {
+            font-size: .8rem; color: var(--text-muted);
+        }
         .history-stats { display: flex; gap: 18px; flex-wrap: wrap; }
         .history-stat { text-align: center; }
-        .hs-val { font-size: 14px; color: var(--text); font-weight: 700; display: block; }
-        .hs-lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-        .winner-tag { font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), #FF9900); color: #000; }
+        .history-stat .hs-val {
+            font-family: 'Orbitron', monospace; font-size: 1rem;
+            color: #fff; display: block;
+        }
+        .history-stat .hs-lbl {
+            font-size: .68rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .winner-tag {
+            font-family: 'Orbitron', monospace; font-size: .72rem;
+            padding: 4px 10px; border-radius: 6px;
+            background: rgba(0,255,136,.12); color: var(--green);
+            border: 1px solid rgba(0,255,136,.25);
+        }
 
-        .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
-        .empty-state .icon { font-size: 2rem; margin-bottom: 10px; display: block; opacity: 0.5; }
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center; padding: 40px 20px;
+            color: var(--text-muted); font-size: .95rem;
+        }
+        .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; display: block; }
+
+        /* ── Improvement insight ── */
+        .insight-box {
+            background: linear-gradient(135deg, rgba(0,245,255,.06), rgba(0,255,136,.04));
+            border: 1px solid rgba(0,245,255,.2);
+            border-radius: 12px; padding: 18px 22px;
+            margin-bottom: 36px; display: flex; gap: 16px;
+            align-items: flex-start;
+        }
+        .insight-icon { font-size: 1.8rem; flex-shrink: 0; }
+        .insight-text h4 {
+            font-family: 'Orbitron', monospace; font-size: .8rem;
+            letter-spacing: 2px; color: var(--cyan); margin-bottom: 6px;
+        }
+        .insight-text p { font-size: .9rem; color: rgba(255,255,255,.7); line-height: 1.5; }
+        .insight-text .highlight { color: var(--green); font-weight: 700; }
     </style>
 </head>
 <body>
 <div class="container">
 
+    <!-- Header -->
     <header>
         <div class="header-left">
-            <h1>DASHBOARD</h1>
+            <h1>📊 DASHBOARD</h1>
             <p>REACTION DUEL — ANALISIS PERFORMA PEMAIN</p>
         </div>
         <a href="index.html" class="back-btn">← MAIN GAME</a>
     </header>
 
+    <!-- Summary Cards -->
     <div class="section-title">Ringkasan</div>
     <div class="summary-grid">
         <div class="summary-card cyan">
@@ -128,6 +274,7 @@
         </div>
     </div>
 
+    <!-- Insight Box -->
     <div class="insight-box" id="insight-box">
         <div class="insight-icon">💡</div>
         <div class="insight-text">
@@ -136,6 +283,7 @@
         </div>
     </div>
 
+    <!-- Charts -->
     <div class="section-title">Grafik Performa</div>
     <div class="chart-grid">
         <div class="chart-card wide">
@@ -152,8 +300,9 @@
         </div>
     </div>
 
+    <!-- Leaderboard -->
     <div class="section-title">Leaderboard</div>
-    <div class="table-card">
+    <div class="table-card" style="margin-bottom:36px">
         <table>
             <thead>
                 <tr>
@@ -172,6 +321,7 @@
         </table>
     </div>
 
+    <!-- Session History -->
     <div class="section-title">Riwayat Sesi</div>
     <div class="history-list" id="history-list">
         <div class="empty-state">
@@ -183,40 +333,150 @@
 </div>
 
 <script>
-const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
+// ══════════════════════════════════════════════
+//  DATA LAYER
+//  Saat ini menggunakan localStorage sebagai
+//  penyimpanan sementara.
+//  TODO: Ganti fetchData() dengan fetch ke
+//  endpoint PHP (db_api.php) milik Adam.
+// ══════════════════════════════════════════════
 
+const STORAGE_KEY  = 'reactionDuel_sessions';
+const WS_URL       = 'wss://project-game-production-ea26.up.railway.app';
+    
+function getSessions() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    } catch { return []; }
+}
+
+function saveSession(session) {
+    const sessions = getSessions();
+    sessions.unshift(session); // terbaru di atas
+    if (sessions.length > 50) sessions.pop(); // maksimal 50 sesi
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+}
+
+// Expose ke client.js agar bisa dipanggil saat GAME_OVER
+window.saveGameSession = function(stats, roundLog) {
+    const session = {
+        id:        'S' + Date.now(),
+        timestamp: new Date().toISOString(),
+        players:   stats,        // array dari server GAME_OVER
+        roundLog:  roundLog || [], // [{round, winner, time}]
+    };
+    saveSession(session);
+};
+
+// ══════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════
+
+const sessions = getSessions();
+
+// ── Summary ──────────────────────────────────
 function renderSummary() {
-    const allTimes = sessions.flatMap(s => s.players.flatMap(p => p.reactionLog || [])).filter(Boolean);
+    const allTimes = sessions.flatMap(s =>
+        s.players.flatMap(p => p.reactionLog || [])
+    ).filter(Boolean);
+
     document.getElementById('sum-sessions').textContent = sessions.length;
-    document.getElementById('sum-rounds').textContent = sessions.reduce((a, s) => a + (s.roundLog?.length || 0), 0);
+    document.getElementById('sum-rounds').textContent   =
+        sessions.reduce((a, s) => a + (s.roundLog?.length || 0), 0);
+
     if (allTimes.length) {
-        const avg = allTimes.reduce((a, b) => a + b, 0) / allTimes.length;
+        const avg  = allTimes.reduce((a,b)=>a+b,0) / allTimes.length;
         const best = Math.min(...allTimes);
-        document.getElementById('sum-avg').innerHTML = avg.toFixed(0) + '<span class="unit">ms</span>';
+        document.getElementById('sum-avg').innerHTML  = avg.toFixed(0)  + '<span class="unit">ms</span>';
         document.getElementById('sum-best').innerHTML = best.toFixed(0) + '<span class="unit">ms</span>';
     }
 }
 
+// ── Insight ───────────────────────────────────
 function renderInsight() {
     const el = document.getElementById('insight-text');
     if (sessions.length < 2) return;
-    const myName = sessions[sessions.length - 1]?.players?.[0]?.username;
-    const myAvgs = sessions.map(s => s.players.find(p => p.username === myName)).filter(Boolean).map(p => p.avgTime).filter(Boolean).map(Number).reverse();
+
+    // Ambil avg reaksi per sesi untuk pemain yang sama
+    const myName = sessions[sessions.length-1]?.players?.[0]?.username;
+    const myAvgs = sessions
+        .map(s => s.players.find(p => p.username === myName))
+        .filter(Boolean)
+        .map(p => p.avgTime)
+        .filter(Boolean)
+        .reverse(); // urut dari lama ke baru
+
     if (myAvgs.length < 2) return;
+
     const first = parseFloat(myAvgs[0]);
-    const last = parseFloat(myAvgs[myAvgs.length - 1]);
+    const last  = parseFloat(myAvgs[myAvgs.length - 1]);
     const delta = first - last;
+    const pct   = ((delta / first) * 100).toFixed(1);
+
     if (delta > 0) {
-        el.innerHTML = `Reaksi kamu <span class="highlight">lebih cepat ${delta.toFixed(0)}ms</span> dibanding sesi pertama! Terus latihan untuk konsistensi.`;
+        el.innerHTML = `Reaksi kamu <span class="highlight">lebih cepat ${delta.toFixed(0)}ms (${pct}%)</span> dibanding sesi pertama! Terus latihan untuk konsistensi yang lebih baik.`;
     } else if (delta < 0) {
-        el.innerHTML = `Reaksi kamu sedikit melambat ${Math.abs(delta).toFixed(0)}ms. Istirahat sebentar lalu coba lagi!`;
+        el.innerHTML = `Reaksi kamu sedikit melambat ${Math.abs(delta).toFixed(0)}ms dibanding sesi pertama. Istirahat sebentar lalu coba lagi!`;
     } else {
-        el.innerHTML = `Reaksi kamu sangat konsisten! Pertahankan dan tingkatkan lagi.`;
+        el.innerHTML = `Reaksi kamu sangat konsisten! Pertahankan dan coba tingkatkan lagi.`;
     }
 }
 
+// ── Leaderboard ─────────────────────────────
+// Ambil dari server via WebSocket → data dari database (sync semua device)
+// Fallback ke localStorage jika WebSocket gagal
 function renderLeaderboard() {
     const tbody = document.getElementById('leaderboard-body');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:rgba(255,255,255,.4)">⏳ Memuat dari server...</td></tr>';
+
+    let gotResponse = false;
+
+    try {
+        const ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'get_leaderboard' }));
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'leaderboard_data') {
+                gotResponse = true;
+                ws.close();
+
+                if (msg.data && msg.data.length > 0) {
+                    // Data dari database Railway
+                    const rows = msg.data.map(r => ({
+                        username:   r.username,
+                        totalScore: parseInt(r.score),
+                        avgTime:    r.avg_reaction_time ? parseFloat(r.avg_reaction_time).toFixed(0) : null,
+                        bestTime:   r.best_time         ? parseFloat(r.best_time).toFixed(0)         : null,
+                        consistency: null,
+                    }));
+                    _renderLeaderboardRows(rows);
+                } else {
+                    // DB kosong, fallback ke localStorage
+                    _renderLeaderboardFromLocal();
+                }
+            }
+        };
+
+        ws.onerror = () => { if (!gotResponse) _renderLeaderboardFromLocal(); };
+
+        // Timeout 5 detik jika server tidak respon
+        setTimeout(() => {
+            if (!gotResponse) {
+                ws.close();
+                _renderLeaderboardFromLocal();
+            }
+        }, 5000);
+
+    } catch(e) {
+        _renderLeaderboardFromLocal();
+    }
+}
+
+function _renderLeaderboardFromLocal() {
     const playerMap = {};
     sessions.forEach(s => {
         s.players?.forEach(p => {
@@ -224,31 +484,35 @@ function renderLeaderboard() {
                 playerMap[p.username] = { username: p.username, scores: [], times: [], bests: [] };
             }
             playerMap[p.username].scores.push(p.score || 0);
-            if (p.avgTime) playerMap[p.username].times.push(parseFloat(p.avgTime));
+            if (p.avgTime)  playerMap[p.username].times.push(parseFloat(p.avgTime));
             if (p.bestTime) playerMap[p.username].bests.push(parseFloat(p.bestTime));
         });
     });
     const rows = Object.values(playerMap).map(p => ({
-        username: p.username,
-        totalScore: p.scores.reduce((a, b) => a + b, 0),
-        avgTime: p.times.length ? (p.times.reduce((a, b) => a + b, 0) / p.times.length).toFixed(0) : null,
-        bestTime: p.bests.length ? Math.min(...p.bests).toFixed(0) : null,
-        consistency: p.times.length > 1 ? (Math.max(...p.times) - Math.min(...p.times)).toFixed(0) : null,
-    })).sort((a, b) => b.totalScore - a.totalScore);
+        username:    p.username,
+        totalScore:  p.scores.reduce((a,b)=>a+b,0),
+        avgTime:     p.times.length ? (p.times.reduce((a,b)=>a+b,0)/p.times.length).toFixed(0) : null,
+        bestTime:    p.bests.length ? Math.min(...p.bests).toFixed(0) : null,
+        consistency: p.times.length > 1 ? (Math.max(...p.times)-Math.min(...p.times)).toFixed(0) : null,
+    })).sort((a,b) => b.totalScore - a.totalScore);
+    _renderLeaderboardRows(rows);
+}
 
+function _renderLeaderboardRows(rows) {
+    const tbody = document.getElementById('leaderboard-body');
     if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="icon">🏆</span>Belum ada data</div></td></tr>';
         return;
     }
     tbody.innerHTML = rows.map((r, i) => {
-        const avg = parseFloat(r.avgTime) || 999;
+        const avg  = parseFloat(r.avgTime) || 999;
         const grade = avg < 200 ? 'WIN' : avg < 300 ? 'GOOD' : 'AVG';
         const badgeClass = grade === 'WIN' ? 'badge-win' : grade === 'GOOD' ? 'badge-good' : 'badge-avg';
-        const rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+        const rankClass  = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
         return `<tr class="${rankClass}">
-            <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+            <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}</td>
             <td>${r.username}</td>
-            <td style="font-weight:800;color:var(--teal)">${r.totalScore}</td>
+            <td style="font-family:'Orbitron',monospace;color:var(--cyan)">${r.totalScore}</td>
             <td>${r.avgTime ? r.avgTime + ' ms' : '---'}</td>
             <td style="color:var(--green)">${r.bestTime ? r.bestTime + ' ms' : '---'}</td>
             <td>${r.consistency ? '±' + r.consistency + ' ms' : '---'}</td>
@@ -257,121 +521,196 @@ function renderLeaderboard() {
     }).join('');
 }
 
+// ── Session History ────────────────────────────
 function renderHistory() {
     const el = document.getElementById('history-list');
     if (!sessions.length) return;
+
     el.innerHTML = sessions.slice(0, 15).map(s => {
-        const winner = s.players?.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
-        const dt = new Date(s.timestamp);
-        const timeStr = dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        const rounds = s.roundLog?.length || 0;
-        const avgAll = s.players?.map(p => p.avgTime).filter(Boolean).map(parseFloat);
-        const sessionAvg = avgAll?.length ? (avgAll.reduce((a, b) => a + b, 0) / avgAll.length).toFixed(0) : '---';
+        const winner   = s.players?.sort((a,b)=>(b.score||0)-(a.score||0))[0];
+        const dt       = new Date(s.timestamp);
+        const timeStr  = dt.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+                       + ' ' + dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+        const rounds   = s.roundLog?.length || 0;
+        const avgAll   = s.players?.map(p=>p.avgTime).filter(Boolean).map(parseFloat);
+        const sessionAvg = avgAll?.length ? (avgAll.reduce((a,b)=>a+b,0)/avgAll.length).toFixed(0) : '---';
+
         return `<div class="history-item">
             <div class="history-meta">
-                <span class="session-id">${s.id || 'S' + Date.now()}</span>
+                <span class="session-id">${s.id}</span>
                 <span class="session-time">${timeStr}</span>
             </div>
             <div class="history-stats">
-                <div class="history-stat"><span class="hs-val">${rounds}</span><span class="hs-lbl">Ronde</span></div>
-                <div class="history-stat"><span class="hs-val">${s.players?.length || 0}</span><span class="hs-lbl">Pemain</span></div>
-                <div class="history-stat"><span class="hs-val">${sessionAvg}ms</span><span class="hs-lbl">Avg</span></div>
+                <div class="history-stat">
+                    <span class="hs-val">${rounds}</span>
+                    <span class="hs-lbl">Ronde</span>
+                </div>
+                <div class="history-stat">
+                    <span class="hs-val">${s.players?.length || 0}</span>
+                    <span class="hs-lbl">Pemain</span>
+                </div>
+                <div class="history-stat">
+                    <span class="hs-val">${sessionAvg}ms</span>
+                    <span class="hs-lbl">Avg Reaksi</span>
+                </div>
             </div>
             ${winner ? `<span class="winner-tag">🏆 ${winner.username}</span>` : ''}
         </div>`;
     }).join('');
 }
 
+// ── Charts ─────────────────────────────────────
+const chartDefaults = {
+    color: 'rgba(255,255,255,.7)',
+    font: { family: 'Rajdhani, sans-serif', size: 11 },
+};
+Chart.defaults.color = chartDefaults.color;
+Chart.defaults.font  = chartDefaults.font;
+
+function makeChartOptions(extra = {}) {
+    return {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { font: { family:'Rajdhani,sans-serif', size:11 }, boxWidth:12 } } },
+        scales: {
+            x: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
+            y: { grid: { color:'rgba(255,255,255,.06)' }, ticks: { font:{family:'Rajdhani,sans-serif',size:10} } },
+        },
+        ...extra,
+    };
+}
+
+// Chart 1: Tren reaction time (5 sesi terakhir, per ronde)
 function buildTrendChart() {
     const ctx = document.getElementById('chart-trend').getContext('2d');
     const recent = sessions.slice(0, 5).reverse();
-    if (!recent.length) { renderEmptyChart(ctx, 'chart-trend'); return; }
-    const colors = ['#00BFA5', '#E53935', '#43A047', '#FFA000', '#7C4DFF'];
+
+    if (!recent.length) {
+        renderEmptyChart(ctx, 'chart-trend'); return;
+    }
+
+    const colors = ['#00f5ff','#ff2d75','#00ff88','#ffe600','#ff8c00'];
     const datasets = recent.map((s, i) => {
         const times = s.roundLog?.map(r => r.winner === s.players?.[0]?.username ? parseFloat(r.time) : null) || [];
         return {
-            label: `Sesi ${i + 1}`,
-            data: times.slice(0, 5),
+            label: `Sesi ${i+1}`,
+            data: times.slice(0,5),
             borderColor: colors[i],
             backgroundColor: colors[i] + '22',
             tension: .4, pointRadius: 5,
             borderWidth: 2, fill: false,
         };
     });
+
     new Chart(ctx, {
         type: 'line',
-        data: { labels: ['Ronde 1', 'Ronde 2', 'Ronde 3', 'Ronde 4', 'Ronde 5'], datasets },
+        data: { labels: ['Ronde 1','Ronde 2','Ronde 3','Ronde 4','Ronde 5'], datasets },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: true } },
+            ...makeChartOptions(),
+            plugins: {
+                legend: { display: true, labels:{ font:{family:'Rajdhani,sans-serif',size:11}, boxWidth:12 } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}ms` } },
+            },
             scales: {
-                x: { grid: { color: 'rgba(0,0,0,.05)' } },
-                y: { grid: { color: 'rgba(0,0,0,.05)' } }
+                ...makeChartOptions().scales,
+                y: { ...makeChartOptions().scales.y,
+                    title: { display:true, text:'Waktu Reaksi (ms)', color:'rgba(255,255,255,.4)', font:{size:10} }
+                }
             }
         }
     });
 }
 
+// Chart 2: Distribusi reaction time (bar histogram)
 function buildDistChart() {
     const ctx = document.getElementById('chart-dist').getContext('2d');
-    const allTimes = sessions.flatMap(s => s.players?.flatMap(p => p.reactionLog || []) || []).filter(Boolean).map(Number);
-    if (!allTimes.length) { renderEmptyChart(ctx, 'chart-dist'); return; }
+    const allTimes = sessions.flatMap(s =>
+        s.players?.flatMap(p => p.reactionLog || []) || []
+    ).filter(Boolean).map(Number);
+
+    if (!allTimes.length) { renderEmptyChart(ctx,'chart-dist'); return; }
+
+    // Bucket per 50ms: 100-150, 150-200, ...
     const buckets = {};
-    allTimes.forEach(t => { const bucket = Math.floor(t / 50) * 50; buckets[bucket] = (buckets[bucket] || 0) + 1; });
-    const sorted = Object.keys(buckets).sort((a, b) => a - b);
+    allTimes.forEach(t => {
+        const bucket = Math.floor(t / 50) * 50;
+        buckets[bucket] = (buckets[bucket] || 0) + 1;
+    });
+    const sorted = Object.keys(buckets).sort((a,b)=>a-b);
+
     new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: sorted.map(k => `${k}-${+k + 50}ms`),
+            labels: sorted.map(k => `${k}-${+k+50}ms`),
             datasets: [{
                 label: 'Jumlah klik',
                 data: sorted.map(k => buckets[k]),
-                backgroundColor: 'rgba(0,191,165,.35)',
-                borderColor: '#00BFA5',
+                backgroundColor: 'rgba(0,245,255,.35)',
+                borderColor: '#00f5ff',
                 borderWidth: 1, borderRadius: 4,
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: makeChartOptions({ plugins:{ legend:{ display:false } } }),
     });
 }
 
+// Chart 3: Konsistensi per sesi (lower = better)
 function buildConsistencyChart() {
     const ctx = document.getElementById('chart-consistency').getContext('2d');
-    const data = sessions.slice(0, 10).reverse().map((s, i) => {
+    const data = sessions.slice(0,10).reverse().map((s,i) => {
         const myPlayer = s.players?.[0];
-        return { x: `S${i + 1}`, y: myPlayer?.consistency ? parseFloat(myPlayer.consistency) : null };
-    }).filter(d => d.y !== null);
-    if (!data.length) { renderEmptyChart(ctx, 'chart-consistency'); return; }
+        return { x: `S${i+1}`, y: myPlayer?.consistency ? parseFloat(myPlayer.consistency) : null };
+    }).filter(d=>d.y !== null);
+
+    if (!data.length) { renderEmptyChart(ctx,'chart-consistency'); return; }
+
     new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: data.map(d => d.x),
+            labels: data.map(d=>d.x),
             datasets: [{
                 label: 'Konsistensi (ms)',
-                data: data.map(d => d.y),
-                backgroundColor: data.map(d => d.y < 50 ? 'rgba(67,160,71,.4)' : d.y < 100 ? 'rgba(255,160,0,.4)' : 'rgba(229,57,53,.4)'),
-                borderColor: data.map(d => d.y < 50 ? '#43A047' : d.y < 100 ? '#FFA000' : '#E53935'),
+                data: data.map(d=>d.y),
+                backgroundColor: data.map(d =>
+                    d.y < 50 ? 'rgba(0,255,136,.4)' : d.y < 100 ? 'rgba(255,230,0,.4)' : 'rgba(255,45,117,.4)'
+                ),
+                borderColor: data.map(d =>
+                    d.y < 50 ? '#00ff88' : d.y < 100 ? '#ffe600' : '#ff2d75'
+                ),
                 borderWidth: 1, borderRadius: 4,
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: {
+            ...makeChartOptions({ plugins:{ legend:{ display:false } } }),
+            scales: {
+                ...makeChartOptions().scales,
+                y: { ...makeChartOptions().scales.y,
+                    title: { display:true, text:'Selisih (ms) — lebih kecil lebih baik',
+                             color:'rgba(255,255,255,.4)', font:{size:10} }
+                }
+            }
+        }
     });
 }
 
 function renderEmptyChart(ctx, id) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">Belum ada data</div>';
+    ctx.canvas.parentElement.innerHTML =
+        '<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center">' +
+        '<span>Belum ada data</span></div>';
 }
 
+// ── Init ──────────────────────────────────────
 renderSummary();
 renderInsight();
-renderLeaderboard();
+renderLeaderboard(); // async, will update when done
 renderHistory();
 buildTrendChart();
 buildDistChart();
 buildConsistencyChart();
 
+// Untuk testing: tambah data dummy jika localStorage kosong
 if (!sessions.length) {
-    document.getElementById('insight-text').textContent = 'Selesaikan minimal 1 game untuk melihat analisis peningkatan skill!';
+    document.getElementById('insight-text').textContent =
+        'Selesaikan minimal 1 game untuk melihat analisis peningkatan skill kamu!';
 }
 </script>
 </body>
