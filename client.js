@@ -40,6 +40,140 @@ const ICON_UNLOCKS = {
     20: { icon: 'fa-crown', name: 'Legend' }
 };
 
+// Jika web diakses via HTTPS (seperti di Railway), gunakan WSS. Jika lokal, gunakan WS.
+const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+
+// Deteksi host otomatis untuk mode lokal vs produksi
+const wsHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'localhost:8080'
+    : window.location.host;
+
+const socket = new WebSocket(protocol + wsHost);
+
+// ─── WEBSOCKET EVENT LISTENERS (Global) ──────────────────────────────────────
+
+socket.onopen = () => {
+    console.log("[WS] Terhubung ke Server!");
+    if (els.serverStatus) els.serverStatus.textContent = "ONLINE";
+
+    // Jika user sudah login (berdasarkan sessionStorage), umumkan kehadiran ke server.
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+        socket.send(JSON.stringify({
+            type: 'JOIN',
+            username: currentUser.username,
+            icon: currentUser.icon || 'fa-user',
+            isGuest: currentUser.type === 'guest'
+        }));
+    }
+};
+
+socket.onmessage = (event) => {
+    let payload;
+    try {
+        payload = JSON.parse(event.data);
+    } catch (e) {
+        console.error("[WS] Gagal parse pesan:", event.data);
+        return;
+    }
+    console.log("[WS] Pesan masuk:", payload);
+
+    switch (payload.type) {
+
+        // ── Chat ─────────────────────────────────────────────
+        case 'CHAT_MESSAGE':
+            Chat.render(payload);
+            break;
+
+        // ── Game: Server mengatur spawn item ─────────────────
+        case 'SPAWN_ITEMS':
+            Game.handleSpawnItems(payload);
+            break;
+
+        // ── Game: Hasil klik dikonfirmasi server ──────────────
+        case 'SCORE_UPDATE':
+            Game.handleScoreUpdate(payload);
+            break;
+
+        // ── Game: Item kedaluwarsa di server ─────────────────
+        case 'ITEM_EXPIRED':
+            Game.handleItemExpired(payload);
+            break;
+
+        // ── Game: Alur ronde dikontrol server ─────────────────
+        case 'ROUND_UPDATE':
+            Game.handleRoundUpdate(payload);
+            break;
+
+        case 'ROUND_RESULT':
+            Game.handleRoundResult(payload);
+            break;
+
+        case 'GAME_OVER':
+            Game.handleGameOver(payload);
+            break;
+
+        case 'START_GAME':
+            // Server memberi sinyal semua pemain siap → mulai game
+            Game._hideReadyAndStart();
+            break;
+
+        case 'WAIT':
+            // Server meminta client standby (jeda antar ronde)
+            Game.setStateWait('', '');
+            break;
+
+        // ── Room & Matchmaking ────────────────────────────────
+        case 'PLAYER_LIST':
+            AppState.roomPlayers = payload.players || [];
+            UI.renderRoomSlots();
+            break;
+
+        case 'MATCH_FOUND':
+            AppState.matchFound = true;
+            break;
+
+        case 'PLAYER_READY_UPDATE':
+            // Tandai kartu pemain lain jadi hijau di ready overlay
+            const oppIdx = AppState.roomPlayers.findIndex(p => p.username === payload.username);
+            if (oppIdx !== -1) {
+                const dot = document.getElementById(`ro-dot-${oppIdx}`);
+                const txt = document.getElementById(`ro-text-${oppIdx}`);
+                if (dot) { dot.style.background = '#43A047'; dot.style.boxShadow = '0 0 10px #43A047'; }
+                if (txt) txt.textContent = 'READY ✓';
+            }
+            break;
+
+        // ── Auth (opsional — untuk migrasi auth ke WS) ────────
+        case 'AUTH_RESULT':
+        case 'REGISTER_RESULT':
+            // Placeholder: saat ini auth masih via localStorage.
+            // Tangani di sini ketika migrasi auth ke WS dilakukan.
+            console.log("[WS] Auth result:", payload);
+            break;
+
+        // ── Leaderboard dari database server ──────────────────
+        case 'leaderboard_data':
+            UI.renderLeaderboardMini(payload.data);
+            break;
+
+        // ── Pesan sistem (disconnect, dll.) ───────────────────
+        case 'SYSTEM':
+            Chat.renderSystem(payload.message);
+            break;
+
+        default:
+            console.warn("[WS] Tipe pesan tidak dikenal:", payload.type);
+    }
+};
+
+socket.onclose = () => {
+    console.log("[WS] Koneksi terputus.");
+    if (els.serverStatus) els.serverStatus.textContent = "OFFLINE";
+};
+
+// ─── END WEBSOCKET EVENT LISTENERS ───────────────────────────────────────────
+
 function getLevelData(totalXP) {
     let currentLevel = 1;
     let nextXP = 0;
@@ -450,20 +584,34 @@ const UI = {
 
 const Network = {
     connect: () => {
-        if (els.serverStatus) els.serverStatus.textContent = "ONLINE";
         Network.refreshLeaderboard();
+        // Jika socket sudah terbuka (user login setelah koneksi established), kirim JOIN sekarang.
+        // Jika belum terbuka, socket.onopen di atas yang akan mengirimnya.
+        if (socket.readyState === WebSocket.OPEN && AppState.user) {
+            socket.send(JSON.stringify({
+                type: 'JOIN',
+                username: AppState.user.username,
+                icon: AppState.user.icon || 'fa-user',
+                isGuest: AppState.isGuest
+            }));
+        }
     },
     refreshLeaderboard: () => {
-        const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
-        const playerMap = {};
-        sessions.forEach(s => {
-            (s.players || []).forEach(p => {
-                if (!playerMap[p.username]) playerMap[p.username] = { username: p.username, score: 0 };
-                playerMap[p.username].score += (parseInt(p.score) || 0);
+        // Prioritaskan data server; fallback ke localStorage jika socket belum siap.
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'get_leaderboard' }));
+        } else {
+            const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
+            const playerMap = {};
+            sessions.forEach(s => {
+                (s.players || []).forEach(p => {
+                    if (!playerMap[p.username]) playerMap[p.username] = { username: p.username, score: 0 };
+                    playerMap[p.username].score += (parseInt(p.score) || 0);
+                });
             });
-        });
-        const lbData = Object.values(playerMap).sort((a, b) => b.score - a.score);
-        UI.renderLeaderboardMini(lbData);
+            const lbData = Object.values(playerMap).sort((a, b) => b.score - a.score);
+            UI.renderLeaderboardMini(lbData);
+        }
     }
 };
 
@@ -755,31 +903,13 @@ const Game = {
         if (btn) { btn.disabled = true; btn.textContent = 'Menunggu Pemain Lain...'; btn.style.opacity = '0.6'; }
 
         if (AppState.isVsAI) {
+            // VS AI: tetap lokal, langsung mulai setelah jeda singkat
             setTimeout(() => { Game._hideReadyAndStart(); }, 600);
         } else {
-            // Filter pemain manusia yang bukan kita
-            const realOpponents = AppState.roomPlayers.map((p, i) => ({...p, index: i})).filter(p => !p.isBot && p.username !== AppState.user.username);
-
-            if (realOpponents.length === 0) {
-                 setTimeout(() => { Game._hideReadyAndStart(); }, 600); // Langsung main kalau lawannya bot semua
-            } else {
-                 let readyCount = 0;
-                 realOpponents.forEach((opp, i) => {
-                     // Simulasi delay acak masing-masing lawan untuk klik "Ready"
-                     setTimeout(() => {
-                         const oppDot = document.getElementById(`ro-dot-${opp.index}`);
-                         const oppTxt = document.getElementById(`ro-text-${opp.index}`);
-                         if (oppDot) { oppDot.style.background = '#43A047'; oppDot.style.boxShadow = '0 0 10px #43A047'; }
-                         if (oppTxt) oppTxt.textContent = 'READY ✓';
-
-                         readyCount++;
-                         // Jika hitungan lawan yang ready sudah sama dengan total lawan, mulai gamenya!
-                         if (readyCount === realOpponents.length) {
-                             setTimeout(() => { Game._hideReadyAndStart(); }, 700);
-                         }
-                     }, Math.random() * 1500 + (600 * (i + 1))); // Delay berbeda tiap orang biar realistis
-                 });
-            }
+            // Multiplayer: beri tahu server bahwa pemain ini siap.
+            // Server akan broadcast PLAYER_READY_UPDATE ke semua,
+            // lalu mengirim START_GAME saat semua ready.
+            socket.send(JSON.stringify({ type: 'PLAYER_READY' }));
         }
     },
 
@@ -791,12 +921,16 @@ const Game = {
     },
 
     nextRound: () => {
+        // Untuk multiplayer: alur ronde sepenuhnya dikontrol server via ROUND_UPDATE + SPAWN_ITEMS.
+        // Fungsi ini hanya dijalankan untuk mode VS AI (lokal).
+        if (!AppState.isVsAI) return;
+
         if (AppState.currentRound > AppState.maxRounds) { Game.endGame(); return; }
         if (els.comboDisplay) els.comboDisplay.classList.remove('show');
         Game.setStateWait('', '');
         if (els.roundInd) els.roundInd.textContent = `ROUND ${AppState.currentRound} / ${AppState.maxRounds}`;
 
-        // Show round intro then countdown then spawn
+        // Show round intro then countdown then spawn (VS AI local flow)
         showRoundIntro(AppState.currentRound, () => {
             showCountdown(3, () => {
                 Game.spawnTrash();
@@ -832,7 +966,12 @@ const Game = {
         }, 1000);
     },
 
+    // ─── spawnTrash: HANYA untuk mode VS AI (lokal) ──────────────────────────
+    // Untuk multiplayer, item di-spawn melalui handleSpawnItems() saat server
+    // mengirim payload SPAWN_ITEMS. Client tidak boleh generate item sendiri.
     spawnTrash: () => {
+        if (!AppState.isVsAI) return; // Guard: hanya boleh jalan di mode VS AI
+
         AppState.isGameActive = true;
         if (els.gameArea) els.gameArea.className = 'state-go';
         if (els.msgMain) { els.msgMain.textContent = ''; }
@@ -865,7 +1004,9 @@ const Game = {
 
             const top = Math.random() * 50 + 15;
             const left = Math.random() * 60 + 10;
-            Game.createItem(type, top, left, itemDuration, round);
+            // ID lokal untuk VS AI — tidak dikirim ke server
+            const localId = `local_${round}_${i}_${Date.now()}`;
+            Game.createItem(type, top, left, itemDuration, round, localId);
         }
 
         // End-of-round auto-timeout
@@ -903,11 +1044,17 @@ const Game = {
         }, baseTime);
     },
 
-    createItem: (type, top, left, duration, speed) => {
+    // ─── createItem: mendukung ID dari server (multiplayer) ──────────────────
+    // Parameter `id` bersifat opsional; VS AI menyuplai ID lokal,
+    // server multiplayer menyuplai ID canonical (misal: "item_2_5").
+    createItem: (type, top, left, duration, round, id = null) => {
+        const itemId = id || `local_${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
         const el = document.createElement('div');
         el.className = `trash-item ${type}`;
         el.style.top = top + '%';
         el.style.left = left + '%';
+        el.dataset.itemId = itemId; // ← Dipakai oleh processClick untuk kirim ke server
 
         let iconClass = 'fa-recycle icon-good';
         if (type === 'bad') iconClass = 'fa-bomb icon-bad';
@@ -924,7 +1071,6 @@ const Game = {
         // Ronde 3   = pelan (0.6)
         // Ronde 4   = sedang (1.3)
         // Ronde 5   = kencang (2.2)
-        const round = AppState.currentRound;
         const speedMap = { 1: 0, 2: 0, 3: 0.2, 4: 0.1, 5: 0.2 };
         const moveSpeed = speedMap[round] !== undefined ? speedMap[round] : 2.2;
 
@@ -951,7 +1097,7 @@ const Game = {
         AppState.gameIntervals.push(moveInt);
         el._intervals.push(moveInt);
 
-        // Despawn after duration
+        // Despawn after duration (hanya relevan untuk VS AI; multiplayer pakai ITEM_EXPIRED dari server)
         const startTime = performance.now();
         const despawnInt = setInterval(() => {
             if (!AppState.isGameActive) { clearInterval(despawnInt); clearInterval(moveInt); return; }
@@ -964,7 +1110,8 @@ const Game = {
                     AppState.combo = 0;
                     Game.updateStats();
                 }
-                Game.checkEndRound();
+                // checkEndRound hanya relevan di VS AI; untuk multiplayer server yang memicu
+                if (AppState.isVsAI) Game.checkEndRound();
             }
         }, 100);
         AppState.gameIntervals.push(despawnInt);
@@ -973,31 +1120,61 @@ const Game = {
         if (els.trashContainer) els.trashContainer.appendChild(el);
     },
 
+    // ─── processClick: REFAKTOR ───────────────────────────────────────────────
+    // VS AI  → skor dihitung lokal (seperti sebelumnya).
+    // Multiplayer → hanya kirim itemId ke server; server yang menghitung skor
+    //               dan membroadcast SCORE_UPDATE kembali ke semua klien.
     processClick: (el, type) => {
         if (!AppState.isGameActive) return;
-        const reactionTime = performance.now() - AppState.gameStartTimestamp;
-        AppState.reactionTimes.push(reactionTime);
-        // Clear this item's intervals immediately (fix memory leak)
+
+        // Hapus item dari DOM segera (responsivitas visual untuk semua mode)
         if (el._intervals) el._intervals.forEach(clearInterval);
         if (el.parentNode) el.parentNode.removeChild(el);
 
-        if (type === 'bad') {
-            Game.showFeedback("BOMB! -50", "#ff4444", false);
-            AppState.currentScore -= 50;
-            AppState.combo = 0;
-        } else if (type === 'bonus') {
-            Game.showFeedback("+250 BONUS!", "#ffd700", true);
-            AppState.currentScore += 250;
-            AppState.combo++;
+        if (AppState.isVsAI) {
+            // ── Mode VS AI: kalkulasi skor lokal (tidak berubah) ──────────────
+            const reactionTime = performance.now() - AppState.gameStartTimestamp;
+            AppState.reactionTimes.push(reactionTime);
+
+            if (type === 'bad') {
+                Game.showFeedback("BOMB! -50", "#ff4444", false);
+                AppState.currentScore -= 50;
+                AppState.combo = 0;
+            } else if (type === 'bonus') {
+                Game.showFeedback("+250 BONUS!", "#ffd700", true);
+                AppState.currentScore += 250;
+                AppState.combo++;
+            } else {
+                const comboBonus = Math.min(AppState.combo, 10) * 10;
+                const score = 100 + comboBonus;
+                Game.showFeedback(`${Math.floor(reactionTime)}ms +${score}`, "#00ff88", true);
+                AppState.currentScore += score;
+                AppState.combo++;
+            }
+            Game.updateStats();
+            Game.checkEndRound();
         } else {
-            const comboBonus = Math.min(AppState.combo, 10) * 10;
-            const score = 100 + comboBonus;
-            Game.showFeedback(`${Math.floor(reactionTime)}ms +${score}`, "#00ff88", true);
-            AppState.currentScore += score;
-            AppState.combo++;
+            // ── Mode Multiplayer: delegasikan ke server ───────────────────────
+            // Server membaca itemId, mencocokkan dengan activeItems[],
+            // menghitung reaksi dari spawnedAt, memvalidasi anti-cheat,
+            // lalu membroadcast SCORE_UPDATE ke semua pemain.
+            const itemId = el.dataset.itemId || '';
+            socket.send(JSON.stringify({
+                type: 'ITEM_CLICKED',
+                itemId: itemId
+            }));
+
+            // Tampilkan feedback visual optimistik (tidak tunggu server)
+            // Jenis item sudah diketahui client dari class elemen
+            if (type === 'bad') {
+                Game.showFeedback("BOMB!", "#ff4444", false);
+            } else if (type === 'bonus') {
+                Game.showFeedback("BONUS!", "#ffd700", true);
+            } else {
+                Game.showFeedback("HIT!", "#00ff88", true);
+            }
+            // Skor & combo sesungguhnya akan diupdate saat SCORE_UPDATE diterima
         }
-        Game.updateStats();
-        Game.checkEndRound();
     },
 
     checkEndRound: () => {
@@ -1028,6 +1205,105 @@ const Game = {
         if (els.statAvg) els.statAvg.textContent = avg;
         if (els.statBest) els.statBest.textContent = best;
         if (els.statScore) els.statScore.textContent = AppState.currentScore;
+    },
+
+    // ─── Handler: SPAWN_ITEMS (dari server, mode multiplayer) ─────────────────
+    handleSpawnItems: (payload) => {
+        AppState.isGameActive = true;
+        AppState.gameStartTimestamp = performance.now();
+        if (els.gameArea) els.gameArea.className = 'state-go';
+        if (els.msgMain) els.msgMain.textContent = '';
+        if (els.msgSub) els.msgSub.textContent = '';
+        if (els.trashContainer) els.trashContainer.innerHTML = '';
+
+        const items = payload.items || [];
+        const round = payload.round || AppState.currentRound;
+
+        // Hitung durasi terpanjang untuk timer UI (pakai max dari semua item)
+        const maxDuration = items.reduce((max, item) => Math.max(max, item.duration || 0), 0);
+        if (maxDuration > 0) Game.startRoundTimer(maxDuration);
+
+        // Render setiap item sesuai instruksi server — posisi & durasi sudah ditentukan server
+        items.forEach(item => {
+            Game.createItem(item.type, item.top, item.left, item.duration, round, item.id);
+        });
+    },
+
+    // ─── Handler: SCORE_UPDATE (dari server, mode multiplayer) ───────────────
+    handleScoreUpdate: (payload) => {
+        AppState.currentScore = parseInt(payload.myScore) || 0;
+        AppState.combo = payload.myCombo || 0;
+
+        // Update tampilan skor langsung dari data server yang sudah tervalidasi
+        if (els.statScore) els.statScore.textContent = AppState.currentScore;
+        if (els.statAvg) els.statAvg.textContent = payload.myAvgReaction || '---';
+        if (els.statBest) els.statBest.textContent = payload.myBestReaction || '---';
+
+        // Update combo display
+        if (AppState.combo >= 2 && els.comboVal && els.comboDisplay) {
+            els.comboVal.textContent = AppState.combo;
+            els.comboDisplay.classList.add('show');
+        } else if (els.comboDisplay) {
+            els.comboDisplay.classList.remove('show');
+        }
+    },
+
+    // ─── Handler: ITEM_EXPIRED (dari server, mode multiplayer) ───────────────
+    handleItemExpired: (payload) => {
+        const itemId = payload.itemId;
+        const resetCombo = payload.resetCombo;
+
+        // Temukan elemen item di DOM berdasarkan data-item-id dan hapus
+        const itemEl = els.trashContainer
+            ? els.trashContainer.querySelector(`[data-item-id="${itemId}"]`)
+            : null;
+
+        if (itemEl) {
+            if (itemEl._intervals) itemEl._intervals.forEach(clearInterval);
+            if (itemEl.parentNode) itemEl.parentNode.removeChild(itemEl);
+        }
+
+        if (resetCombo) {
+            AppState.combo = 0;
+            if (els.comboDisplay) els.comboDisplay.classList.remove('show');
+            if (els.statScore) els.statScore.textContent = AppState.currentScore;
+        }
+        // Akhir ronde dideteksi server via checkRoundEnd(); client menunggu ROUND_RESULT.
+    },
+
+    // ─── Handler: ROUND_UPDATE (dari server, mode multiplayer) ───────────────
+    handleRoundUpdate: (payload) => {
+        AppState.currentRound = payload.round;
+        if (els.comboDisplay) els.comboDisplay.classList.remove('show');
+        if (els.roundInd) els.roundInd.textContent = `ROUND ${payload.round} / ${AppState.maxRounds}`;
+        // Tampilkan animasi intro ronde; server akan kirim SPAWN_ITEMS setelah delay-nya sendiri
+        showRoundIntro(payload.round, null);
+    },
+
+    // ─── Handler: ROUND_RESULT (dari server, mode multiplayer) ───────────────
+    handleRoundResult: (payload) => {
+        // Tampilkan hasil sementara; server akan kirim ROUND_UPDATE atau GAME_OVER berikutnya
+        const winner = payload.roundWinner || '';
+        if (els.msgMain) { els.msgMain.textContent = 'ROUND END'; els.msgMain.style.color = '#FFA000'; }
+        if (els.msgSub) { els.msgSub.textContent = winner ? `🏆 ${winner}` : ''; els.msgSub.style.color = '#FFA000'; }
+    },
+
+    // ─── Handler: GAME_OVER (dari server, mode multiplayer) ──────────────────
+    handleGameOver: (payload) => {
+        // Ambil statistik milik sendiri dari payload untuk ditampilkan di modal
+        const myStats = (payload.stats || []).find(
+            s => AppState.user && s.username === AppState.user.username
+        );
+
+        if (myStats) {
+            AppState.currentScore = parseInt(myStats.score) || 0;
+            // Rekonstruksi reactionTimes dari avgTime server untuk kalkulasi display
+            if (myStats.avgTime != null) {
+                AppState.reactionTimes = [parseFloat(myStats.avgTime)];
+            }
+        }
+
+        Game.endGame(false);
     },
 
     endGame: (isDisconnect = false) => {
@@ -1125,15 +1401,39 @@ const Storage = {
 
 const Chat = {
     handleKey: (e) => { if (e.key === 'Enter') Chat.send(); },
+
+    // ─── send: REFAKTOR ───────────────────────────────────────────────────────
+    // Tidak lagi me-render langsung ke DOM. Pesan dikirim ke server;
+    // server membroadcast CHAT_MESSAGE, dan Chat.render() yang akan merender.
     send: () => {
         if (!els.chatInput) return;
         const msg = els.chatInput.value.trim();
         if (!msg) return;
+        socket.send(JSON.stringify({ type: 'CHAT', message: msg }));
+        els.chatInput.value = '';
+    },
+
+    // ─── render: dipanggil dari socket.onmessage saat CHAT_MESSAGE masuk ─────
+    render: (payload) => {
+        if (!els.chatBox) return;
+        const isMe = AppState.user && payload.username === AppState.user.username;
         const div = document.createElement('div');
         div.className = 'chat-msg';
-        div.innerHTML = `<span class="chat-msg-meta" style="color:#00BFA5;">${AppState.user ? AppState.user.username : 'Guest'}:</span>${msg}`;
-        if (els.chatBox) { els.chatBox.appendChild(div); els.chatBox.scrollTop = els.chatBox.scrollHeight; }
-        els.chatInput.value = '';
+        div.innerHTML = `<span class="chat-msg-meta" style="color:${isMe ? '#00BFA5' : '#FFA000'};">${payload.username}${payload.time ? ' [' + payload.time + ']' : ''}:</span> ${payload.message}`;
+        els.chatBox.appendChild(div);
+        els.chatBox.scrollTop = els.chatBox.scrollHeight;
+    },
+
+    // ─── renderSystem: untuk pesan sistem dari server (disconnect, dll.) ─────
+    renderSystem: (message) => {
+        if (!els.chatBox || !message) return;
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        div.style.color = 'rgba(255,255,255,0.4)';
+        div.style.fontStyle = 'italic';
+        div.innerHTML = `⚙️ ${message}`;
+        els.chatBox.appendChild(div);
+        els.chatBox.scrollTop = els.chatBox.scrollHeight;
     }
 };
 
