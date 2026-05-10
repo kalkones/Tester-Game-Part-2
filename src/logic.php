@@ -150,68 +150,103 @@ class Logic implements MessageComponentInterface {
     //  AUTH HANDLERS
     // =========================================================
     private function handleAuthLogin(ConnectionInterface $conn, array $data): void {
-        $id   = trim($data['identifier'] ?? '');
-        $pass = $data['password']         ?? '';
-        if (!$id || !$pass) {
-            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Isi semua field.']));
+    $id   = trim($data['identifier'] ?? '');
+    $pass = $data['password']         ?? '';
+
+    if (!$id || !$pass) {
+        $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Isi semua field.']));
+        return;
+    }
+    $db = getDB();
+    if (!$db) {
+        $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
+        return;
+    }
+    try {
+        // [FIX LOGIN] - Ubah SELECT * menjadi kolom eksplisit agar level & total_xp
+        //              selalu tersedia meski skema tabel berubah di masa depan.
+        $stmt = $db->prepare(
+            "SELECT username, email, password_hash, icon, level, total_xp, games_played, best_time
+             FROM users
+             WHERE username = :u OR email = :e
+             LIMIT 1"
+        );
+        $stmt->execute([':u' => $id, ':e' => $id]);
+        $user = $stmt->fetch();
+
+        if (!$user || !password_verify($pass, $user['password_hash'])) {
+            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Username atau password salah.']));
             return;
         }
-        $db = getDB();
-        if (!$db) {
-            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
-            return;
-        }
-        try {
-            $stmt = $db->prepare("SELECT * FROM users WHERE username = :id_user OR email = :id_email LIMIT 1");
-            $stmt->execute([':id_user' => $id, ':id_email' => $id]);
-            $user = $stmt->fetch();
 
-            if (!$user || !password_verify($pass, $user['password_hash'])) {
-                $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Username atau password salah.']));
-                return;
-            }
+        echo "[AUTH]   Login: {$user['username']}\n";
 
-            echo "[AUTH]   Login berhasil: {$user['username']}\n";
-            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>true,'user'=>[
+        // [FIX LOGIN] - Sertakan level dan totalXP secara eksplisit di payload respons
+        //              agar client dapat langsung merender badge level di lobby.
+        $conn->send($this->encode([
+            'type'    => 'AUTH_RESULT',
+            'success' => true,
+            'user'    => [
                 'username'    => $user['username'],
                 'email'       => $user['email'],
-                'icon'        => $user['icon'],
-                'level'       => $user['level'],
-                'totalXP'     => $user['total_xp'] ?? 0,
-                'gamesPlayed' => $user['games_played'],
+                'icon'        => $user['icon']         ?? 'fa-user',
+                'level'       => (int)($user['level']       ?? 1),
+                'totalXP'     => (int)($user['total_xp']    ?? 0),
+                'gamesPlayed' => (int)($user['games_played'] ?? 0),
                 'bestTime'    => $user['best_time'],
                 'type'        => 'registered',
-            ]]));
-        } catch (\PDOException $e) {
-            echo "[DB ERR] Login: {$e->getMessage()}\n";
-            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error server.']));
-        }
+            ],
+        ]));
+
+    } catch (\PDOException $e) {
+        echo "[DB ERR] Login: {$e->getMessage()}\n";
+        $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error server.']));
     }
+}
 
     private function handleAuthRegister(ConnectionInterface $conn, array $data): void {
-        $username = trim($data['username'] ?? '');
-        $email    = trim($data['email']    ?? '');
-        $pass     = $data['password']      ?? '';
-        if (!$username || !$pass) {
-            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username & password wajib.']));
+    $username = trim($data['username'] ?? '');
+    $email    = trim($data['email']    ?? '');
+    $pass     = $data['password']      ?? '';
+
+    if (!$username || !$pass) {
+        $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username & password wajib.']));
+        return;
+    }
+    $db = getDB();
+    if (!$db) {
+        $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
+        return;
+    }
+    try {
+        // [FIX REGISTER] - Cek duplikasi username/email sebelum insert
+        $stmt = $db->prepare(
+            "SELECT id FROM users
+             WHERE username = :u OR (email != '' AND email = :e)
+             LIMIT 1"
+        );
+        $stmt->execute([':u' => $username, ':e' => $email]);
+        if ($stmt->fetch()) {
+            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username/email sudah dipakai.']));
             return;
         }
-        $db = getDB();
-        if (!$db) {
-            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia.']));
-            return;
-        }
-        try {
-            $stmt = $db->prepare("SELECT id FROM users WHERE username=:u OR (email!='' AND email=:e) LIMIT 1");
-            $stmt->execute([':u' => $username, ':e' => $email]);
-            if ($stmt->fetch()) {
-                $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username/email sudah dipakai.']));
-                return;
-            }
-            $hash = password_hash($pass, PASSWORD_DEFAULT);
-            $db->prepare("INSERT INTO users (username,email,password_hash) VALUES (:u,:e,:p)")
-               ->execute([':u' => $username, ':e' => $email, ':p' => $hash]);
-            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>true,'user'=>[
+
+        // [FIX REGISTER] - INSERT akun baru menggunakan prepared statement PDO.
+        //                  level=1 dan total_xp=0 adalah nilai awal yang fix.
+        $hash = password_hash($pass, PASSWORD_DEFAULT);
+        $db->prepare(
+            "INSERT INTO users (username, email, password_hash, level, total_xp)
+             VALUES (:u, :e, :p, 1, 0)"
+        )->execute([':u' => $username, ':e' => $email, ':p' => $hash]);
+
+        echo "[AUTH]   Register baru: {$username}\n";
+
+        // [FIX REGISTER] - Kirim kembali user object lengkap (termasuk level & totalXP)
+        //                  agar client dapat langsung render tanpa request tambahan.
+        $conn->send($this->encode([
+            'type'    => 'REGISTER_RESULT',
+            'success' => true,
+            'user'    => [
                 'username'    => $username,
                 'email'       => $email,
                 'icon'        => 'fa-user',
@@ -220,47 +255,56 @@ class Logic implements MessageComponentInterface {
                 'gamesPlayed' => 0,
                 'bestTime'    => null,
                 'type'        => 'registered',
-            ]]));
-        } catch (\PDOException $e) {
-            echo "[DB ERR] Register: {$e->getMessage()}\n";
-            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Error server.']));
-        }
+            ],
+        ]));
+
+    } catch (\PDOException $e) {
+        echo "[DB ERR] Register: {$e->getMessage()}\n";
+        $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Error server.']));
     }
+}
 
     // =========================================================
     //  LOBBY HANDLERS
     // =========================================================
     private function handleJoin(ConnectionInterface $conn, array $data): void {
-        $username = trim($data['username'] ?? '');
-        $icon     = $data['icon']          ?? 'fa-user';
-        $isGuest  = $data['isGuest']        ?? false;
-        if (!$username) return;
+    $username = trim($data['username'] ?? '');
+    $icon     = $data['icon']          ?? 'fa-user';
+    $isGuest  = $data['isGuest']        ?? false;
+    $level    = (int)($data['level']   ?? 1);
+    if (!$username) return;
 
-        foreach ($this->players as $p) {
-            if (strtolower($p['username']) === strtolower($username)) {
-                $conn->send($this->encode(['type'=>'ERROR','message'=>"Nama '{$username}' sudah dipakai."]));
-                return;
-            }
+    // Cek duplikat sebelum menambah ke array
+    foreach ($this->players as $p) {
+        if (strtolower($p['username']) === strtolower($username)) {
+            $conn->send($this->encode(['type'=>'ERROR','message'=>"Username '{$username}' sudah online."]));
+            return;
         }
-
-        $this->players[] = [
-            'conn'         => $conn,
-            'username'     => $username,
-            'icon'         => $icon,
-            'isGuest'      => $isGuest,
-            'score'        => 0,
-            'reactionLog'  => [],
-            'combo'        => 0,
-            'penalties'    => 0,
-            'isReady'      => false,
-            'findingMatch' => false,
-            'roomId'       => null,   // ← null = belum di room
-        ];
-
-        echo "[JOIN]   {$username} bergabung. Total: " . count($this->players) . "\n";
-        $this->broadcastAll(['type' => 'PLAYER_LIST', 'players' => $this->getPlayerListData()]);
-        $this->sendChatHistory($conn);
     }
+
+    $this->players[] = [
+        'conn'         => $conn,
+        'username'     => $username,
+        'icon'         => $icon,
+        'isGuest'      => $isGuest,
+        'level'        => $level,
+        'roomId'       => null,
+        'score'        => 0,
+        'reactionLog'  => [],
+        'combo'        => 0,
+        'penalties'    => 0,
+        'isReady'      => false,
+        'findingMatch' => false,
+    ];
+
+    echo "[JOIN]   {$username} online. Total: " . count($this->players) . "\n";
+    $this->broadcastPlayerList();
+
+    // [FIX CHAT TRIGGER] - Kirim 20 pesan terakhir ke pemain yang baru masuk lobby.
+    //                      Dipanggil di sini (setelah JOIN) karena conn baru resmi
+    //                      menjadi bagian lobby setelah data player terdaftar di $this->players.
+    $this->sendChatHistory($conn);
+}
 
     private function handleChat(ConnectionInterface $conn, array $data): void {
         $username = $data['username'] ?? '?';
