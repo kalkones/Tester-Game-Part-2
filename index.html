@@ -5,871 +5,353 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reaction Duel — Arena</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Exo+2:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ═══════════════════════════════════════════════════
-           ROOT — BRIGHT ARCADE THEME
-        ═══════════════════════════════════════════════════ */
         :root {
-            --bg:          #E8F4FF;
-            --bg2:         #F0F8FF;
+            --bg:          #F0F4F8;
+            --bg2:         #FFFFFF;
             --surface:     #FFFFFF;
-            --border:      #D0E8F8;
-
+            --border:      #D1D9E6;
             --teal:        #00BFA5;
             --teal-light:  #E0F7FA;
-            --teal-dark:   #00695C;
-
+            --teal-dark:   #00897B;
             --orange:      #FF6B35;
             --orange-light:#FFF3E0;
-            --orange-dark: #BF360C;
-
+            --orange-dark: #E65100;
             --blue:        #2196F3;
             --blue-light:  #E3F2FD;
-            --blue-dark:   #0D47A1;
-
+            --blue-dark:   #1565C0;
             --purple:      #7C4DFF;
             --purple-light:#EDE7F6;
-            --purple-dark: #4A148C;
-
-            --gold:        #F9A825;
-            --green:       #00C853;
-            --red:         #F44336;
-
-            --text:        #1A1A2E;
-            --text2:       #555577;
-            --text3:       #8888AA;
-
-            --shadow:      0 4px 20px rgba(0,0,0,0.08);
-            --shadow-hover:0 8px 32px rgba(0,0,0,0.14);
+            --purple-dark: #512DA8;
+            --gold:        #FFA000;
+            --green:       #43A047;
+            --red:         #E53935;
+            --text:        #1A237E;
+            --text2:       #5C6BC0;
+            --text3:       #9FA8DA;
+            --shadow:      0 4px 20px rgba(26,35,126,0.08);
+            --shadow-hover:0 8px 30px rgba(26,35,126,0.12);
         }
-
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-        body {
-            font-family: 'Exo 2', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Animated bg grid */
-        body::before {
-            content: '';
-            position: fixed; inset: 0; z-index: 0;
-            background-image:
-                linear-gradient(rgba(0,191,165,.06) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,191,165,.06) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-        }
+        
+        body { font-family: 'Exo 2', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; z-index: 0; background-image: linear-gradient(rgba(0,191,165,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,191,165,.04) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
 
         .screen { position:relative; z-index:10; width:100vw; height:100vh; display:none; }
         .screen.active { display:flex; }
 
-        /* ─── PIXEL FONT ─── */
-        .px { font-family: 'Press Start 2P', monospace; }
-
-        /* ═══════════════════════════════════════════════════
-           LOGIN SCREEN
-        ═══════════════════════════════════════════════════ */
-        #login-screen {
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 0;
-            background: linear-gradient(135deg, #E8F4FF 0%, #F0E8FF 50%, #E8FFF4 100%);
-        }
-
-        .login-box {
-            background: var(--surface);
-            border: 3px solid var(--teal);
-            border-radius: 20px;
-            padding: 40px 36px;
-            width: 100%;
-            max-width: 420px;
-            box-shadow: 0 8px 40px rgba(0,191,165,.2), var(--shadow);
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .login-box::before {
-            content: '';
-            position: absolute; top: 0; left: 0; right: 0; height: 4px;
-            background: linear-gradient(90deg, var(--teal), var(--blue), var(--purple));
-        }
-
-        .login-logo {
-            font-family: 'Press Start 2P', monospace;
-            font-size: 1.6rem;
-            color: var(--teal);
-            line-height: 1.4;
-            margin-bottom: 6px;
-        }
-        .login-sub {
-            font-size: 11px;
-            color: var(--text3);
-            margin-bottom: 28px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
+        #login-screen { flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #F0F4F8 0%, #E8EAF6 50%, #E0F7FA 100%); }
+        .login-box { background: rgba(255,255,255,0.95); border: 2px solid var(--teal); border-radius: 20px; padding: 40px 36px; width: 100%; max-width: 420px; box-shadow: 0 10px 40px rgba(0,191,165,.15), var(--shadow); text-align: center; position: relative; backdrop-filter: blur(10px); }
+        .login-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--teal), var(--blue), var(--purple)); border-radius: 20px 20px 0 0; }
+        .login-logo { font-size: 2.2rem; font-weight: 900; color: var(--teal); letter-spacing: 2px; margin-bottom: 4px; }
+        .login-sub { font-size: 12px; color: var(--text3); margin-bottom: 28px; letter-spacing: 3px; text-transform: uppercase; font-weight: 600; }
         .input-group { margin-bottom: 14px; text-align: left; }
-        .input-label {
-            font-size: 10px;
-            font-family: 'Press Start 2P', monospace;
-            color: var(--text3);
-            display: block;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-        }
-        .input-field {
-            width: 100%; padding: 13px 16px;
-            background: var(--bg); border: 2px solid var(--border);
-            border-radius: 10px; color: var(--text);
-            font-family: 'Exo 2', sans-serif; font-size: 1rem;
-            outline: none; transition: .2s;
-        }
-        .input-field:focus { border-color: var(--teal); background: #fff; box-shadow: 0 0 0 3px rgba(0,191,165,.15); }
-
-        .btn-main {
-            width: 100%; padding: 14px;
-            border: none; border-radius: 10px;
-            font-family: 'Press Start 2P', monospace; font-size: 11px;
-            cursor: pointer; transition: .2s; margin-bottom: 10px;
-            letter-spacing: 1px;
-        }
-        .btn-login-action { background: linear-gradient(135deg,var(--teal),#00E5FF); color: #fff; }
-        .btn-login-action:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,191,165,.35); }
+        .input-label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 6px; letter-spacing: 1px; font-weight: 600; }
+        .input-field { width: 100%; padding: 14px 16px; background: var(--bg); border: 2px solid var(--border); border-radius: 12px; color: var(--text); font-size: 1rem; outline: none; transition: .2s; }
+        .input-field:focus { border-color: var(--teal); background: #fff; box-shadow: 0 0 0 4px rgba(0,191,165,.1); }
+        .btn-main { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; transition: .2s; margin-bottom: 10px; letter-spacing: 1px; }
+        .btn-login-action { background: linear-gradient(135deg,var(--teal),#26C6DA); color: #fff; }
+        .btn-login-action:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,191,165,.3); }
         .btn-secondary { background: var(--surface); border: 2px solid var(--orange); color: var(--orange); }
         .btn-secondary:hover { background: var(--orange-light); }
         .btn-guest { background: var(--bg); border: 2px solid var(--border); color: var(--text2); }
-        .btn-guest:hover { border-color: var(--text3); }
-
-        .divider { display:flex; align-items:center; color: var(--text3); font-size:11px; margin: 14px 0; }
+        .btn-guest:hover { border-color: var(--text2); }
+        .divider { display:flex; align-items:center; color: var(--text3); font-size:11px; margin: 16px 0; }
         .divider::before, .divider::after { content:''; flex:1; height:1px; background: var(--border); }
-        .divider span { padding: 0 10px; }
-
+        .divider span { padding: 0 12px; font-weight: 600; }
         .error-msg { color: var(--red); font-size: 12px; margin-bottom: 12px; min-height: 18px; font-weight: 600; }
 
-        /* ═══════════════════════════════════════════════════
-           TUTORIAL OVERLAY (shown after register)
-        ═══════════════════════════════════════════════════ */
-        #tutorial-overlay {
-            display: none;
-            position: fixed; inset: 0; z-index: 200;
-            background: rgba(0,0,0,.55);
-            align-items: center; justify-content: center;
-        }
-        #tutorial-overlay.show { display: flex; }
-
-        .tutorial-box {
-            background: var(--surface);
-            border: 3px solid var(--teal);
-            border-radius: 20px;
-            padding: 32px 28px;
-            max-width: 520px; width: 92%;
-            text-align: center;
-            animation: popIn .4s cubic-bezier(.34,1.56,.64,1);
-        }
-        @keyframes popIn { from{transform:scale(.8);opacity:0} to{transform:scale(1);opacity:1} }
-
-        .tut-title {
-            font-family: 'Press Start 2P', monospace;
-            font-size: 13px; color: var(--teal); margin-bottom: 6px;
-        }
-        .tut-sub { font-size: 12px; color: var(--text3); margin-bottom: 24px; }
-
-        .tut-steps { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
-        .tut-step {
-            background: var(--bg); border: 2px solid var(--border);
-            border-radius: 12px; padding: 14px 10px; text-align: center;
-        }
-        .tut-step-icon { font-size: 2rem; margin-bottom: 8px; display: block; }
-        .tut-step-name { font-family:'Press Start 2P',monospace; font-size:8px; color:var(--text); margin-bottom:4px; }
-        .tut-step-desc { font-size: 11px; color: var(--text3); }
-
-        .tut-ai-banner {
-            background: linear-gradient(135deg, var(--orange-light), #FFF8E1);
-            border: 2px solid var(--orange); border-radius: 12px;
-            padding: 14px; margin-bottom: 20px;
-            font-size: 12px; color: var(--orange-dark);
-            display: flex; align-items: center; gap: 10px;
-        }
-        .tut-ai-banner i { font-size: 1.4rem; color: var(--orange); }
-
-        .btn-tut-start {
-            width: 100%; padding: 14px;
-            background: linear-gradient(135deg, var(--orange), #FF8F00);
-            color: #fff; border: none; border-radius: 10px;
-            font-family: 'Press Start 2P', monospace; font-size: 10px;
-            cursor: pointer; transition: .2s; margin-bottom: 8px;
-        }
-        .btn-tut-start:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,107,53,.35); }
-        .btn-tut-skip { background: none; border: none; color: var(--text3); font-size: 12px; cursor: pointer; }
-
-        /* ═══════════════════════════════════════════════════
-           TOPBAR
-        ═══════════════════════════════════════════════════ */
-        .topbar {
-            position: absolute; top: 0; left: 0; right: 0; z-index: 50;
-            height: 60px;
-            background: var(--surface);
-            border-bottom: 3px solid var(--teal);
-            display: flex; align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-shadow: 0 2px 12px rgba(0,191,165,.15);
-        }
-
-        .user-profile { display:flex; align-items:center; gap:10px; cursor:pointer; }
-        .user-avatar {
-            width: 40px; height: 40px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--teal), var(--blue));
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.1rem; color: #fff;
-            border: 2px solid var(--teal);
-            transition: .2s;
-        }
-        .user-avatar:hover { transform: scale(1.1); }
-
+        .topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 50; height: 60px; background: rgba(255,255,255,0.95); border-bottom: 2px solid var(--teal); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 2px 15px rgba(0,191,165,.1); backdrop-filter: blur(8px); }
+        .user-profile { display:flex; align-items:center; gap:12px; cursor:pointer; }
+        .user-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), var(--blue)); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #fff; border: 2px solid var(--teal); transition: .2s; }
+        .user-avatar:hover { transform: scale(1.08); }
         .user-info { text-align: left; }
-        .user-name { font-family:'Press Start 2P',monospace; font-size:9px; color:var(--text); }
-        .level-text {
-            font-size: 9px; color: var(--teal);
-            font-family: 'Press Start 2P', monospace;
-            display: flex; align-items: center; gap: 6px; margin-top: 3px;
-        }
-        .level-text span { color: var(--text3); font-family:'Exo 2',sans-serif; font-size:10px; }
-
-        .xp-bar-bg {
-            width: 130px; height: 5px;
-            background: var(--border); border-radius: 3px; overflow: hidden;
-            margin-top: 4px;
-        }
-        .xp-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--teal), #00E5FF);
-            width: 0%; transition: width .5s ease-out;
-            border-radius: 3px;
-        }
-
-        .topbar-center {
-            font-family: 'Press Start 2P', monospace;
-            font-size: 14px; color: var(--teal);
-            letter-spacing: 3px;
-        }
-
-        .topbar-right { display: flex; align-items: center; gap: 10px; }
-        .server-status-badge {
-            display: flex; align-items: center; gap: 6px;
-            font-size: 10px; font-weight: 700;
-            padding: 5px 10px;
-            background: var(--bg); border: 1.5px solid var(--border);
-            border-radius: 20px;
-        }
-        .dot-status {
-            width: 8px; height: 8px; border-radius: 50%;
-        }
-        .dot-online { background: var(--green); animation: blink 1.5s infinite; }
+        .user-name { font-size: 14px; font-weight: 700; color:var(--text); }
+        .level-text { font-size: 11px; color: var(--teal); display: flex; align-items: center; gap: 6px; margin-top: 2px; font-weight: 600; }
+        .level-text span { color: var(--text3); font-size: 10px; }
+        .xp-bar-bg { width: 120px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+        .xp-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), #26C6DA); width: 0%; transition: width .5s ease-out; border-radius: 3px; }
+        .topbar-center { font-size: 16px; color: var(--teal); letter-spacing: 4px; font-weight: 900; }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
+        .server-status-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 6px 12px; background: var(--bg); border: 2px solid var(--border); border-radius: 20px; }
+        .dot-status { width: 8px; height: 8px; border-radius: 50%; }
+        .dot-online { background: var(--green); box-shadow: 0 0 8px var(--green); }
         .dot-offline { background: var(--red); }
-        @keyframes blink { 50%{opacity:.4} }
-
-        #server-status { font-size: 10px; font-weight: 700; }
-
-        .btn-topbar {
-            font-family: 'Press Start 2P', monospace; font-size: 7px;
-            padding: 7px 12px; border-radius: 8px; cursor: pointer;
-            transition: .2s; border: 2px solid;
-        }
+        #server-status { font-weight: 700; }
+        .btn-topbar { font-size: 11px; padding: 8px 14px; border-radius: 10px; cursor: pointer; transition: .2s; border: 2px solid; font-weight: 700; }
         .btn-dashboard { background: var(--purple); color: #fff; border-color: var(--purple-dark); }
-        .btn-dashboard:hover { opacity: .85; }
-        .btn-logout { background: var(--surface); color: var(--red); border-color: var(--red); }
+        .btn-dashboard:hover { opacity: .9; transform: translateY(-1px); }
+        .btn-logout { background: transparent; color: var(--red); border-color: var(--red); }
         .btn-logout:hover { background: #FFEBEE; }
 
-        /* ═══════════════════════════════════════════════════
-           LOBBY SCREEN
-        ═══════════════════════════════════════════════════ */
-        #lobby-screen {
-            flex-direction: row;
-            align-items: stretch;
-            padding-top: 60px;
-        }
-
-        .lobby-main { flex: 1; padding: 16px; overflow-y: auto; }
-
-        /* 4-panel grid */
-        .panels-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto;
-            gap: 14px;
-            height: 100%;
-        }
-
-        /* ─── Panel base ─── */
-        .panel-card {
-            background: var(--surface);
-            border-radius: 16px;
-            border: 3px solid var(--border);
-            overflow: hidden;
-            display: flex; flex-direction: column;
-            box-shadow: var(--shadow);
-            transition: .25s;
-            cursor: pointer;
-            position: relative;
-        }
+        #lobby-screen { flex-direction: row; align-items: stretch; padding-top: 60px; }
+        .lobby-main { flex: 1; padding: 16px; padding-bottom: 100px; overflow-y: auto; }
+        .panels-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 16px; }
+        .panel-card { background: rgba(255,255,255,0.9); border-radius: 16px; border: 2px solid var(--border); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow); transition: .25s; cursor: pointer; position: relative; min-height: 200px; }
         .panel-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+        .panel-head { padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid var(--border); flex-shrink: 0; }
+        .panel-icon-wrap { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .panel-label { font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+        .panel-body { padding: 14px; flex: 1; overflow-y: auto; min-height: 0; }
 
-        .panel-head {
-            padding: 11px 16px;
-            display: flex; align-items: center; gap: 10px;
-            border-bottom: 2px solid var(--border);
-        }
-        .panel-icon-wrap {
-            width: 34px; height: 34px; border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 17px; flex-shrink: 0;
-        }
-        .panel-label {
-            font-family: 'Press Start 2P', monospace;
-            font-size: 9px; letter-spacing: .5px;
-        }
-        .panel-badge {
-            margin-left: auto;
-            font-size: 9px; font-weight: 800;
-            padding: 3px 8px; border-radius: 10px;
-        }
-
-        .panel-body { padding: 12px 14px 14px; flex: 1; }
-
-        /* ROOM panel */
         .pc-room { border-color: var(--teal); }
         .pc-room .panel-head { background: linear-gradient(135deg, #E0F7FA, #B2EBF2); }
         .pc-room .panel-icon-wrap { background: var(--teal); color:#fff; }
         .pc-room .panel-label { color: var(--teal-dark); }
+        .room-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .room-stat { background: var(--bg); border: 2px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+        .rs-num { font-size:20px; font-weight:800; color:var(--teal); }
+        .rs-lbl { font-size:10px; color:var(--text3); margin-top:2px; font-weight:600; }
+        .btn-room-action { width: 100%; padding: 12px; background: linear-gradient(135deg, var(--teal), #26C6DA); color: #fff; border: none; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; transition: .2s; }
+        .btn-room-action:hover { opacity: .9; transform: scale(1.01); }
 
-        .room-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-        .room-stat {
-            background: var(--bg);
-            border: 1.5px solid var(--border);
-            border-radius: 8px; padding: 8px; text-align: center;
-        }
-        .rs-num { font-family:'Press Start 2P',monospace; font-size:14px; color:var(--teal); }
-        .rs-lbl { font-size:9px; color:var(--text3); margin-top:2px; }
-
-        .player-slot {
-            display: flex; align-items: center; gap: 8px;
-            padding: 7px 10px; border-radius: 8px; margin-bottom: 6px;
-            border: 1.5px solid;
-        }
-        .slot-filled { background: #F0FFF8; border-color: #B2DFDB; }
-        .slot-empty { background: #FAFAFA; border-color: #e0e0e0; border-style: dashed; }
-        .slot-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .slot-dot.on { background: var(--green); }
-        .slot-dot.off { background: #ccc; }
-        .slot-name { font-size: 12px; font-weight: 700; flex: 1; }
-        .slot-lvl { font-size: 10px; color: var(--teal); font-family:'Press Start 2P',monospace; font-size:7px; }
-        .slot-empty .slot-name { color: #bbb; font-weight: 400; font-size:11px; }
-
-        .spectator-row { font-size:10px; color:var(--text3); margin:4px 0 8px; }
-
-        .btn-room-start {
-            width: 100%; padding: 10px;
-            background: linear-gradient(135deg, var(--teal), #00E5FF);
-            color: #fff; border: none; border-radius: 8px;
-            font-family: 'Press Start 2P', monospace; font-size: 8px;
-            cursor: pointer; transition: .2s;
-        }
-        .btn-room-start:hover { opacity: .88; transform: scale(1.02); }
-
-        /* VS AI panel */
         .pc-ai { border-color: var(--orange); }
         .pc-ai .panel-head { background: linear-gradient(135deg, #FFF3E0, #FFE0B2); }
         .pc-ai .panel-icon-wrap { background: var(--orange); color:#fff; }
         .pc-ai .panel-label { color: var(--orange-dark); }
-
-        .new-badge { background: #FFF9C4; color: #F57F17; border: 1.5px solid #FFF176; }
-
-        .ai-list { display:flex; flex-direction:column; gap:8px; }
-        .ai-row {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-radius: 10px;
-            border: 2px solid #FFD0B5; background: #FFF8F5;
-            cursor: pointer; transition: .2s;
-        }
-        .ai-row:hover { background: #FFE0C5; border-color: var(--orange); transform: translateX(3px); }
-        .ai-row-icon { font-size: 1.4rem; }
-        .ai-row-name { font-family:'Press Start 2P',monospace; font-size:8px; color:var(--orange-dark); }
+        .new-badge { background: #FFF9C4; color: #F57F17; border: 1px solid #FFF176; font-size: 9px; padding: 3px 8px; border-radius: 8px; }
+        .ai-list { display:flex; flex-direction:column; gap:10px; }
+        .ai-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 2px solid #FFD0B5; background: rgba(255,248,245,0.9); cursor: pointer; transition: .2s; }
+        .ai-row:hover { background: #FFE0C5; border-color: var(--orange); transform: translateX(4px); }
+        .ai-row-icon { font-size: 1.5rem; }
+        .ai-row-name { font-size:12px; font-weight:800; color:var(--orange-dark); }
         .ai-row-desc { font-size:10px; color:var(--text3); margin-top:2px; }
-        .ai-diff {
-            margin-left:auto; font-size:9px; font-weight:800;
-            padding:3px 8px; border-radius:10px;
-        }
-        .diff-easy { background:#E8F5E9; color:#2E7D32; border:1.5px solid #A5D6A7; }
-        .diff-hard { background:#FFEBEE; color:#C62828; border:1.5px solid #FFCDD2; }
+        .ai-diff { margin-left:auto; font-size:10px; font-weight:800; padding:4px 10px; border-radius:10px; }
+        .diff-easy { background:#E8F5E9; color:#2E7D32; border:1px solid #A5D6A7; }
+        .diff-hard { background:#FFEBEE; color:#C62828; border:1px solid #FFCDD2; }
 
-        /* LEADERBOARD panel */
         .pc-lb { border-color: var(--blue); }
         .pc-lb .panel-head { background: linear-gradient(135deg, #E3F2FD, #BBDEFB); }
         .pc-lb .panel-icon-wrap { background: var(--blue); color:#fff; }
         .pc-lb .panel-label { color: var(--blue-dark); }
-
         .lb-rows { display:flex; flex-direction:column; gap:6px; }
-        .lb-row {
-            display: flex; align-items: center; gap: 8px;
-            padding: 7px 10px; border-radius: 8px; background: var(--bg);
-            border: 1.5px solid var(--border);
-        }
-        .lb-row.lb-me { background: #EDE7F6; border-color: #D1C4E9; }
-        .lb-rank-num {
-            font-family:'Press Start 2P',monospace; font-size:9px;
-            width: 20px; text-align: center;
-        }
+        .lb-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 2px solid var(--border); }
+        .lb-row.lb-me { background: #EDE7F6; border-color: #B39DDB; }
+        .lb-rank-num { font-size:12px; font-weight:800; width: 24px; text-align: center; }
         .rank-1 { color: var(--gold); }
-        .rank-2 { color: #9E9E9E; }
+        .rank-2 { color: #78909C; }
         .rank-3 { color: #A1887F; }
-        .rank-other { color: #ccc; font-size:7px; }
-        .lb-av { width:26px; height:26px; border-radius:50%; background:var(--blue-light); font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-        .lb-name { font-size:12px; font-weight:700; flex:1; }
-        .lb-score { font-family:'Press Start 2P',monospace; font-size:8px; color:var(--blue); }
+        .rank-other { color: #ccc; }
+        .lb-av { width:28px; height:28px; border-radius:50%; background:var(--blue-light); font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border: 2px solid #90CAF9; }
+        .lb-name { font-size:13px; font-weight:700; flex:1; }
+        .lb-score { font-size:11px; font-weight:800; color:var(--blue); }
 
-        /* STATISTICS panel */
         .pc-stat { border-color: var(--purple); }
         .pc-stat .panel-head { background: linear-gradient(135deg, #EDE7F6, #D1C4E9); }
         .pc-stat .panel-icon-wrap { background: var(--purple); color:#fff; }
         .pc-stat .panel-label { color: var(--purple-dark); }
+        .stat-mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .stat-mini { background: #F5F0FF; border-radius:12px; padding: 12px 10px; text-align:center; border: 2px solid #D1C4E9; }
+        .sm-val { font-size:16px; font-weight:800; color:var(--purple); }
+        .sm-lbl { font-size:10px; color:var(--text3); margin-top:4px; font-weight:600; }
+        .click-hint { font-size:10px; color:var(--purple); margin-top:12px; text-align:center; font-weight:600; }
 
-        .stat-mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-        .stat-mini {
-            background: #F5F0FF; border-radius:10px;
-            padding: 10px 8px; text-align:center;
-            border: 1.5px solid #D1C4E9;
-        }
-        .sm-val { font-family:'Press Start 2P',monospace; font-size:11px; color:var(--purple); }
-        .sm-lbl { font-size:9px; color:var(--text3); margin-top:3px; }
-        .sm-trend { font-size:10px; font-weight:700; margin-top:2px; }
-        .trend-up { color: var(--green); }
-        .trend-down { color: var(--red); }
-
-        /* ─── FIND MATCH button at bottom ─── */
-        .find-match-wrap {
-            padding: 12px 16px;
-            position: absolute; bottom: 0; left: 0; right: 280px;
-            background: linear-gradient(transparent, var(--bg) 40%);
-        }
-        #start-btn {
-            width: 100%; padding: 14px;
-            background: linear-gradient(135deg, var(--orange), #FF8F00);
-            color: #fff; border: none; border-radius: 14px;
-            font-family: 'Press Start 2P', monospace; font-size: 11px;
-            cursor: pointer; transition: .2s; letter-spacing: 2px;
-            box-shadow: 0 4px 18px rgba(255,107,53,.35);
-        }
-        #start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(255,107,53,.45); }
-        #lobby-status { text-align:center; font-size:11px; color:var(--text3); margin-top:4px; }
-
-        /* ═══════════════════════════════════════════════════
-           SIDEBAR (Chat + Players)
-        ═══════════════════════════════════════════════════ */
-        .lobby-sidebar {
-            width: 280px; flex-shrink: 0;
-            background: var(--surface);
-            border-left: 3px solid var(--border);
-            display: flex; flex-direction: column;
-            height: 100%;
-        }
-
-        .sidebar-tabs {
-            display: flex; border-bottom: 2px solid var(--border);
-        }
-        .stab {
-            flex: 1; padding: 11px 6px;
-            font-family: 'Press Start 2P', monospace; font-size: 7px;
-            text-align: center; cursor: pointer; background: none;
-            border: none; border-bottom: 3px solid transparent;
-            color: var(--text3); transition: .2s;
-        }
+        .lobby-sidebar { width: 280px; flex-shrink: 0; background: rgba(255,255,255,0.9); border-left: 2px solid var(--border); display: flex; flex-direction: column; height: 100%; }
+        .sidebar-tabs { display: flex; border-bottom: 2px solid var(--border); }
+        .stab { flex: 1; padding: 12px 6px; font-size: 11px; text-align: center; cursor: pointer; background: none; border: none; border-bottom: 3px solid transparent; color: var(--text3); transition: .2s; font-weight: 700; }
         .stab.active { color: var(--teal); border-bottom-color: var(--teal); background: #F0FFFC; }
-
         .stab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
         .stab-content.active { display: flex; }
+        .players-list-wrap { flex:1; padding:12px; overflow-y:auto; }
+        #player-list-container { display:flex; flex-direction:column; gap:8px; }
+        .online-player { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 2px solid var(--border); border-radius: 10px; }
+        .op-av { width: 34px; height: 34px; border-radius: 50%; background: var(--blue-light); border: 2px solid #90CAF9; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .op-name { font-size: 13px; font-weight: 700; }
+        .op-lvl { font-size: 10px; color: var(--teal); font-weight: 700; }
 
-        /* Players list */
-        .players-list-wrap { flex:1; padding:10px; overflow-y:auto; }
-        #player-list-container { display:flex; flex-direction:column; gap:6px; }
-        .online-player {
-            display: flex; align-items: center; gap: 8px;
-            padding: 8px 10px; background: var(--bg);
-            border: 1.5px solid var(--border); border-radius: 8px;
-        }
-        .op-av {
-            width: 32px; height: 32px; border-radius: 50%;
-            background: var(--blue-light); border: 2px solid #90CAF9;
-            display: flex; align-items: center; justify-content: center; font-size: 1rem;
-        }
-        .op-name { font-size: 12px; font-weight: 700; }
-        .op-lvl { font-size: 9px; color: var(--teal); font-family:'Press Start 2P',monospace; }
-
-        /* Chat */
-        .chat-msgs {
-            flex: 1; padding: 10px; overflow-y: auto;
-            display: flex; flex-direction: column; gap: 6px;
-            min-height: 0;
-        }
-        #chat-box { display:flex; flex-direction:column; gap:6px; }
-        .chat-msg {
-            padding: 6px 8px; border-radius: 8px;
-            font-size: 11px; line-height: 1.5;
-        }
-        .chat-msg-meta { font-weight: 800; margin-right: 4px; }
-
-        .chat-send-row {
-            display: flex; gap: 6px; padding: 10px;
-            border-top: 2px solid var(--border);
-        }
-        #chat-input {
-            flex: 1; padding: 8px 10px;
-            border: 2px solid var(--border); border-radius: 8px;
-            font-size: 12px; font-family: 'Exo 2', sans-serif;
-            background: var(--bg); outline: none; color: var(--text);
-            transition: .2s;
-        }
+        .chat-msgs { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+        #chat-box { display:flex; flex-direction:column; gap:8px; }
+        .chat-msg { padding: 8px 12px; border-radius: 10px; font-size: 12px; line-height: 1.5; background: var(--bg); }
+        .chat-msg-meta { font-weight: 800; margin-right: 6px; }
+        .chat-send-row { display: flex; gap: 8px; padding: 12px; border-top: 2px solid var(--border); }
+        #chat-input { flex: 1; padding: 10px 14px; border: 2px solid var(--border); border-radius: 10px; font-size: 12px; background: var(--bg); outline: none; color: var(--text); transition: .2s; }
         #chat-input:focus { border-color: var(--teal); background: #fff; }
-        .chat-send-btn {
-            width: 36px; height: 36px; border-radius: 8px;
-            background: var(--teal); color: #fff; border: none;
-            cursor: pointer; font-size: 14px; display: flex;
-            align-items: center; justify-content: center; transition: .2s;
-        }
+        .chat-send-btn { padding: 10px 16px; border-radius: 10px; background: var(--teal); color: #fff; border: none; cursor: pointer; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; transition: .2s; }
         .chat-send-btn:hover { background: var(--teal-dark); }
 
-        /* ═══════════════════════════════════════════════════
-           GAME SCREEN  (kept mostly same, brightened)
-        ═══════════════════════════════════════════════════ */
-        #game-screen {
-            position: relative; overflow: hidden;
-            background: linear-gradient(135deg, #0a0a1a 0%, #0d1a2e 100%);
+        #room-waiting-screen { flex-direction: column; align-items: center; justify-content: flex-start; background: var(--bg); padding-top: 60px; overflow-y: auto; }
+        .room-waiting-container { width: 100%; max-width: 600px; padding: 20px; }
+        .rw-box { background: rgba(255,255,255,0.95); border: 2px solid var(--teal); border-radius: 20px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+        .rw-title { font-size: 14px; font-weight: 800; color: var(--teal); margin-bottom: 12px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .rw-title i { color: var(--teal-dark); }
+        
+        .tutorial-box { background: var(--bg); border: 2px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+        .tut-item { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 13px; color: var(--text2); }
+        .tut-item:last-child { margin-bottom: 0; }
+        .tut-icon { width: 24px; text-align: center; }
+        .tut-good { color: var(--green); }
+        .tut-bad { color: var(--red); }
+        .tut-bonus { color: var(--gold); }
+
+        .slots-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .slot-card { background: var(--bg); border: 2px solid var(--border); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; transition: .2s; }
+        .slot-card.filled { background: #E0F7FA; border-color: var(--teal); }
+        .slot-card.filled-me { background: #E8F5E9; border-color: var(--blue); }
+        .slot-avatar { width: 40px; height: 40px; border-radius: 50%; background: #ccc; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.2rem; }
+        .slot-avatar.has-user { background: linear-gradient(135deg, var(--teal), var(--blue)); }
+        .slot-info { flex: 1; }
+        .slot-name { font-size: 13px; font-weight: 700; color: var(--text); }
+        .slot-status { font-size: 11px; color: var(--text3); font-weight: 600; }
+        .slot-empty-text { color: #bbb; font-weight: 500; }
+
+        .spectator-box { margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--border); }
+        .spec-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .spec-item { font-size: 11px; background: var(--bg); padding: 4px 10px; border-radius: 8px; color: var(--text2); border: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+        .spec-item i { font-size: 10px; color: var(--text3); }
+
+        .rw-actions { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-rw { flex: 1; padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; transition: .2s; border: 2px solid; }
+        .btn-leave-room { background: transparent; color: var(--red); border-color: var(--red); }
+        .btn-leave-room:hover { background: #FFEBEE; }
+        .btn-find-match { background: linear-gradient(135deg, var(--orange), #FF8F00); color: #fff; border-color: var(--orange-dark); box-shadow: 0 4px 15px rgba(255,107,53,.2); }
+        .btn-find-match:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,107,53,.3); }
+
+        #game-screen { position: relative; overflow: hidden; background: #000; }
+        
+        
+        #bg-video-game {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: 0; opacity: 0.4; pointer-events: none;
         }
 
-        #game-ui-top {
-            position: absolute; top: 0; left: 0; width: 100%;
-            padding: 12px 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 20;
-            background: rgba(255,255,255,.06);
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid rgba(0,191,165,.2);
-            pointer-events: none;
-        }
+        #game-ui-top { position: absolute; top: 0; left: 0; width: 100%; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 20; background: rgba(255,255,255,.9); backdrop-filter: blur(8px); border-bottom: 2px solid var(--teal); pointer-events: none; }
         #game-ui-top button { pointer-events: auto; }
+        .timer-display { font-size: 24px; font-weight: 900; color: var(--red); min-width: 60px; text-align: center; }
+        .timer-display.warning { animation: pulseRed 0.5s infinite; }
+        @keyframes pulseRed { 0%{color: var(--red);} 50%{color: #ff8a80;} 100%{color: var(--red);} }
 
-        .btn-exit {
-            background: var(--red); color: #fff; border: none;
-            padding: 8px 16px; border-radius: 8px; cursor: pointer;
-            font-family: 'Press Start 2P', monospace; font-size: 8px;
-            transition: .2s;
-        }
-        .btn-exit:hover { opacity: .85; }
-
-        #round-indicator {
-            font-family: 'Press Start 2P', monospace; font-size: 11px;
-            color: #00E5FF; letter-spacing: 2px;
-        }
-        #mode-indicator { font-size: 10px; color: rgba(255,255,255,.5); font-family:'Press Start 2P',monospace; }
-
-        #combo-display {
-            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
-            font-family: 'Press Start 2P', monospace; font-size: 1.4rem;
-            color: var(--gold);
-            opacity: 0; transition: opacity .3s;
-            z-index: 15; pointer-events: none;
-            text-shadow: 0 0 12px rgba(249,168,37,.6);
-        }
-        #combo-display.show { opacity: 1; transform: translateX(-50%) scale(1.15); }
-
+        .btn-exit { background: var(--red); color: #fff; border: none; padding: 10px 18px; border-radius: 10px; cursor: pointer; font-size: 11px; font-weight: 800; transition: .2s; }
+        .btn-exit:hover { opacity: .9; transform: scale(1.02); }
+        #round-indicator { font-size: 13px; color: var(--teal); letter-spacing: 2px; font-weight: 800; }
+        #mode-indicator { font-size: 11px; color: var(--text2); font-weight: 700; }
+        #combo-display { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); font-size: 1.4rem; color: var(--gold); opacity: 0; transition: opacity .3s; z-index: 15; pointer-events: none; text-shadow: 0 2px 10px rgba(255,160,0,.3); font-weight: 800; }
+        #combo-display.show { opacity: 1; transform: translateX(-50%) scale(1.1); }
         #game-area { position: relative; width: 100%; height: 100%; z-index: 5; }
-        .color-overlay {
-            position: absolute; inset: 0; z-index: 1;
-            transition: background .2s;
-        }
-        .state-wait .color-overlay { background: rgba(5,5,15,.85); }
+        .color-overlay { position: absolute; inset: 0; z-index: 1; transition: background .2s; }
+        .state-wait .color-overlay { background: rgba(240,244,248,.95); }
         .state-go .color-overlay { background: transparent; }
-
-        .trash-item {
-            position: absolute; width: 90px; height: 90px;
-            background: rgba(20,20,35,.92);
-            border: 2px solid rgba(255,255,255,.1);
-            border-radius: 12px; cursor: pointer;
-            display: flex; justify-content: center; align-items: center;
-            backdrop-filter: blur(5px);
-            transition: transform .1s;
-            box-shadow: 0 4px 16px rgba(0,0,0,.5);
-            animation: popIn .3s cubic-bezier(.175,.885,.32,1.275);
-            z-index: 20; pointer-events: auto;
-        }
+        
+        .trash-item { position: absolute; width: 85px; height: 85px; background: var(--surface); border: 3px solid var(--border); border-radius: 14px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: transform .1s; box-shadow: 0 6px 20px rgba(26,35,126,.15); animation: popIn .3s cubic-bezier(.175,.885,.32,1.275); z-index: 20; pointer-events: auto; }
         @keyframes popIn { from{transform:scale(0)} to{transform:scale(1)} }
+        .trash-item.good { border-color: var(--green); box-shadow: 0 0 20px rgba(67,160,71,.25); }
+        .trash-item.bad { border-color: var(--red); box-shadow: 0 0 20px rgba(229,57,53,.25); }
+        .trash-item.bonus { border-color: var(--gold); box-shadow: 0 0 25px rgba(255,160,0,.3); }
+        .icon-good { color: var(--green); font-size: 2.5rem; }
+        .icon-bad { color: var(--red); font-size: 2.5rem; }
+        .icon-bonus { color: var(--gold); font-size: 2.2rem; }
+        
+        .center-message { position: absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; z-index: 15; pointer-events:none; white-space:pre-wrap; line-height:1.2; color: var(--text); width:80%; }
+        .msg-main { display:block; font-size:clamp(2rem,7vw,4rem); font-weight:900; }
+        .msg-sub { display:block; font-size:clamp(.9rem,2.5vw,1.3rem); color: var(--text2); margin-top:10px; }
+        #stats-panel { position: absolute; bottom:20px; left:50%; transform:translateX(-50%); display: flex; gap:12px; z-index:20; width:90%; justify-content:center; }
+        .stat-box { background: var(--surface); padding:10px 18px; border-radius:12px; text-align:center; min-width:85px; border: 2px solid var(--border); box-shadow: var(--shadow); }
+        .stat-val { font-size:1.1rem; color: var(--text); font-weight:800; }
+        .stat-lbl { font-size:10px; color: var(--text3); text-transform:uppercase; font-weight:600; }
 
-        .trash-item.good  { border-color: #00ff88; }
-        .trash-item.bad   { border-color: #ff3333; }
-        .trash-item.bonus { border-color: #ffe600; box-shadow: 0 0 20px rgba(255,230,0,.4); }
-        .trash-item.moving { animation: popIn .3s cubic-bezier(.175,.885,.32,1.275), drift 3s ease-in-out infinite alternate; }
-        @keyframes drift {
-            0%   { transform: translate(0,0) scale(1); }
-            33%  { transform: translate(var(--dx,10px),var(--dy,-5px)) scale(1.02); }
-            66%  { transform: translate(calc(var(--dx,10px)*-1),calc(var(--dy,-5px)*.5)) scale(.98); }
-            100% { transform: translate(0,0) scale(1); }
+        .ready-room { 
+            display: none; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.95); z-index: 30; 
+            flex-direction: column; align-items: center; justify-content: center; 
         }
-        .trash-timer { position:absolute; bottom:5px; left:5px; right:5px; height:4px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
-        .timer-fill { height:100%; width:100%; background:currentColor; transform-origin:left; }
-
-        .icon-good  { color:#00ff88; font-size:3rem; text-shadow:0 0 15px rgba(0,255,136,.5); }
-        .icon-bad   { color:#ff3333; font-size:3rem; text-shadow:0 0 15px rgba(255,51,51,.5); }
-        .icon-bonus { color:#ffe600; font-size:2.5rem; text-shadow:0 0 15px rgba(255,230,0,.5); }
-
-        .center-message {
-            position: absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-            font-family: 'Press Start 2P', monospace; text-align:center;
-            z-index: 15; pointer-events:none; white-space:pre-wrap;
-            line-height:1.2; color:#fff; width:80%;
-        }
-        .msg-main { display:block; font-size:clamp(2rem,7vw,4.5rem); font-weight:900; }
-        .msg-sub  { display:block; font-size:clamp(.9rem,2.5vw,1.4rem); color:#bbb; margin-top:10px; }
-        .unit-ms  { font-size:.4em; color:#00E5FF; margin-left:5px; letter-spacing:2px; }
-
-        #stats-panel {
-            position: absolute; bottom:20px; left:50%; transform:translateX(-50%);
-            display: flex; gap:10px; z-index:20;
-            width:90%; justify-content:center;
-        }
-        .stat-box {
-            background: rgba(0,0,0,.75); padding:8px 16px;
-            border-radius:10px; text-align:center; min-width:80px;
-            border: 1px solid rgba(255,255,255,.1); backdrop-filter:blur(5px);
-        }
-        .stat-val { font-family:'Press Start 2P',monospace; font-size:1rem; color:#fff; }
-        .stat-lbl { font-size:.65rem; color:rgba(255,255,255,.5); text-transform:uppercase; }
-
-        /* Ready Room */
-        .ready-room {
-            display:none; flex-direction:column; align-items:center;
-            width:100%; max-width:500px; margin-top:100px; z-index:20;
-        }
-        .ready-room.active { display:flex; }
-        .match-vs { display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:32px; }
-        .player-card {
-            text-align:center; background:rgba(0,0,0,.6);
-            padding:20px; border-radius:14px;
-            border: 2px solid rgba(0,191,165,.4); width:45%;
-        }
-        .player-card.is-me { border-color: rgba(0,200,83,.5); }
-        .status-dot { width:18px; height:18px; border-radius:50%; background:#555; margin:10px auto; transition:.3s; }
-        .status-dot.ready  { background:var(--green); box-shadow:0 0 10px var(--green); }
+        .ready-room.active { display: flex; }
+        
+        .match-vs { display:flex; justify-content:space-between; align-items:center; width:80%; max-width:500px; margin-bottom:30px; }
+        .player-card { text-align:center; background: var(--surface); padding:20px; border-radius:16px; border: 3px solid var(--border); width:45%; box-shadow: var(--shadow); }
+        .player-card.is-me { border-color: var(--green); }
+        .status-dot { width:20px; height:20px; border-radius:50%; background:#ccc; margin:12px auto; transition:.3s; }
+        .status-dot.ready { background:var(--green); box-shadow:0 0 12px var(--green); }
         .status-dot.waiting{ background:var(--gold); animation:blink 1s infinite; }
-        .btn-ready {
-            width:100%; padding:18px;
-            background: linear-gradient(135deg,var(--gold),#FF9900);
-            color:#000; font-size:1.3rem; border:none; border-radius:12px;
-            font-family:'Press Start 2P',monospace; font-weight:900; cursor:pointer;
-            animation: pulseBtn 1.5s infinite;
-        }
-        @keyframes pulseBtn { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+        @keyframes blink { 50%{opacity:.5} }
+        .btn-ready { width:80%; max-width:300px; padding:18px; background: linear-gradient(135deg,var(--gold),#FF9900); color:#000; font-size:1.2rem; border:none; border-radius:14px; font-weight:900; cursor:pointer; animation: pulseBtn 1.5s infinite; box-shadow: 0 6px 25px rgba(255,160,0,.3); }
+        @keyframes pulseBtn { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
 
-        /* ═══════════════════════════════════════════════════
-           RESULT MODAL
-        ═══════════════════════════════════════════════════ */
-        #result-modal, #profile-modal {
-            display:none; position:fixed; inset:0;
-            background:rgba(0,0,0,.6); z-index:100;
-            justify-content:center; align-items:center;
-        }
+        #result-modal, #profile-modal { display:none; position:fixed; inset:0; background:rgba(26,35,126,.4); z-index:100; justify-content:center; align-items:center; backdrop-filter: blur(8px); }
         #result-modal.show { display:flex; }
-
-        .result-box {
-            background: var(--surface);
-            border: 3px solid var(--teal);
-            padding: 36px 32px; border-radius: 20px;
-            text-align:center; max-width:440px; width:92%;
-            box-shadow: 0 12px 50px rgba(0,191,165,.25);
-            animation: popIn .4s cubic-bezier(.34,1.56,.64,1);
-            position:relative; overflow:hidden;
-        }
-        .result-box::before {
-            content:''; position:absolute; top:0; left:0; right:0; height:4px;
-            background: linear-gradient(90deg,var(--teal),var(--blue),var(--purple));
-        }
-        .result-title { font-family:'Press Start 2P',monospace; font-size:1.5rem; color:var(--teal); margin-bottom:20px; }
-        .result-row {
-            display:flex; justify-content:space-between; margin-bottom:12px;
-            font-size:1rem; border-bottom:1px solid var(--border); padding-bottom:6px;
-        }
-        .result-row span:last-child { font-family:'Press Start 2P',monospace; font-size:11px; color:var(--blue); }
+        .result-box { background: var(--surface); border: 3px solid var(--teal); padding: 36px 32px; border-radius: 20px; text-align:center; max-width:420px; width:92%; box-shadow: 0 15px 50px rgba(0,191,165,.15); animation: popIn .3s ease-out; position:relative; }
+        .result-title { font-size:1.8rem; color:var(--teal); margin-bottom:20px; font-weight:900; }
+        .result-row { display:flex; justify-content:space-between; margin-bottom:14px; font-size:14px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+        .result-row span:last-child { font-size:13px; color:var(--blue); font-weight:800; }
         .result-actions { margin-top:24px; display:flex; gap:10px; flex-direction:column; }
-        .btn-result-main {
-            width:100%; padding:13px;
-            background:linear-gradient(135deg,var(--teal),#00E5FF);
-            color:#fff; border:none; border-radius:10px;
-            font-family:'Press Start 2P',monospace; font-size:9px;
-            cursor:pointer; transition:.2s;
-        }
-        .btn-result-main:hover { opacity:.88; transform:scale(1.02); }
-        .btn-result-sec {
-            width:100%; padding:13px;
-            background:var(--surface); border:2px solid var(--orange);
-            color:var(--orange); border-radius:10px;
-            font-family:'Press Start 2P',monospace; font-size:9px;
-            cursor:pointer; transition:.2s;
-        }
+        .btn-result-main { width:100%; padding:14px; background:linear-gradient(135deg,var(--teal),#26C6DA); color:#fff; border:none; border-radius:12px; font-size:12px; font-weight:800; cursor:pointer; transition:.2s; }
+        .btn-result-main:hover { opacity:.9; transform:scale(1.01); }
+        .btn-result-sec { width:100%; padding:14px; background:var(--surface); border:2px solid var(--orange); color:var(--orange); border-radius:12px; font-size:12px; font-weight:800; cursor:pointer; transition:.2s; }
         .btn-result-sec:hover { background:var(--orange-light); }
 
-        /* ═══════════════════════════════════════════════════
-           PROFILE MODAL
-        ═══════════════════════════════════════════════════ */
-        .modal-content {
-            background:var(--surface); padding:28px;
-            border-radius:18px; width:360px; text-align:center;
-            border: 3px solid var(--purple);
-            box-shadow: 0 12px 40px rgba(124,77,255,.2);
-            animation: popIn .35s cubic-bezier(.34,1.56,.64,1);
-        }
-        .modal-title { font-family:'Press Start 2P',monospace; font-size:11px; color:var(--purple); margin-bottom:14px; }
-        .icon-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
-        .icon-option {
-            padding:10px; background:var(--bg);
-            border: 2px solid var(--border); border-radius:10px;
-            cursor:pointer; transition:.2s;
-        }
+        .modal-content { background:var(--surface); padding:28px; border-radius:18px; width:360px; text-align:center; border: 3px solid var(--purple); box-shadow: 0 15px 50px rgba(124,77,255,.15); animation: popIn .3s ease-out; }
+        .modal-title { font-size:14px; color:var(--purple); margin-bottom:16px; font-weight:800; }
+        .icon-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+        .icon-option { padding:12px; background:var(--bg); border: 2px solid var(--border); border-radius:12px; cursor:pointer; transition:.2s; }
         .icon-option:hover { border-color:var(--purple); background:var(--purple-light); }
-        .btn-close-modal {
-            width:100%; padding:11px;
-            background:var(--bg); border:2px solid var(--border);
-            border-radius:10px;
-            font-family:'Press Start 2P',monospace; font-size:9px;
-            cursor:pointer; color:var(--text2); transition:.2s;
-        }
-        .btn-close-modal:hover { border-color:var(--text3); }
+        .btn-close-modal { width:100%; padding:12px; background:var(--bg); border:2px solid var(--border); border-radius:12px; font-size:12px; font-weight:700; cursor:pointer; color:var(--text2); transition:.2s; }
+        .btn-close-modal:hover { border-color:var(--text2); }
 
-        /* Scrollbar styling */
-        ::-webkit-scrollbar { width: 5px; }
+        .empty-state { text-align: center; padding: 20px; color: var(--text3); font-size: 12px; font-weight: 600; }
+
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+        @media (max-width: 900px) {
+            .lobby-content { grid-template-columns: 1fr; }
+            .lobby-left, .lobby-right { display: none; }
+            .bottom-bar { flex-direction: column; padding: 10px 15px; }
+            .btn-dashboard, .btn-find-match { width: 100%; }
+            .lobby-sidebar { display: none; }
+            .panels-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
 
-<!-- ═════════════════════════════════════════════
-     TUTORIAL OVERLAY (shown after register)
-═════════════════════════════════════════════ -->
-<div id="tutorial-overlay">
-    <div class="tutorial-box">
-        <div class="tut-title">SELAMAT DATANG, PEJUANG! ⚡</div>
-        <div class="tut-sub">Sebelum bertarung, kenali arena dulu</div>
-
-        <div class="tut-steps">
-            <div class="tut-step">
-                <span class="tut-step-icon">🏟️</span>
-                <div class="tut-step-name">ROOM</div>
-                <div class="tut-step-desc">Bergabung room & tanding vs pemain lain</div>
-            </div>
-            <div class="tut-step">
-                <span class="tut-step-icon">🤖</span>
-                <div class="tut-step-name">VS AI</div>
-                <div class="tut-step-desc">Latihan melawan bot sebelum bertarung</div>
-            </div>
-            <div class="tut-step">
-                <span class="tut-step-icon">♻️</span>
-                <div class="tut-step-name">KLIK HIJAU</div>
-                <div class="tut-step-desc">+100 poin tiap klik item hijau</div>
-            </div>
-            <div class="tut-step">
-                <span class="tut-step-icon">💣</span>
-                <div class="tut-step-name">HINDARI BOM</div>
-                <div class="tut-step-desc">Klik bom = -50 poin & combo hilang!</div>
-            </div>
-        </div>
-
-        <div class="tut-ai-banner">
-            <i class="fas fa-robot"></i>
-            <div>
-                <strong>Rekomendasi untuk pemain baru:</strong><br>
-                Coba dulu <b>VS AI Easy</b> untuk terbiasa dengan gameplay sebelum bermain ranked!
-            </div>
-        </div>
-
-        <button class="btn-tut-start" onclick="startTutorialVsAI()">
-            🤖 MULAI LATIHAN VS AI
-        </button>
-        <button class="btn-tut-skip" onclick="closeTutorial()">Lewati, langsung ke lobby →</button>
-    </div>
-</div>
-
-<!-- ═════════════════════════════════════════════
-     LOGIN SCREEN
-═════════════════════════════════════════════ -->
 <div id="login-screen" class="screen active">
     <div class="login-box">
-        <div class="login-logo">REACTION<br>DUEL</div>
+        <div class="login-logo">REACTION DUEL</div>
         <div class="login-sub">Enter The Arena</div>
-
         <div id="login-error" class="error-msg"></div>
-
         <div class="input-group">
             <label class="input-label" for="login-id">USERNAME OR EMAIL</label>
-            <input type="text" id="login-id" class="input-field" placeholder="daffa / daffa@email.com" autocomplete="off">
+            <input type="text" id="login-id" class="input-field" placeholder="Username or Email" autocomplete="off">
         </div>
         <div class="input-group">
             <label class="input-label" for="login-pass">PASSWORD</label>
-            <input type="password" id="login-pass" class="input-field" placeholder="••••••••">
+            <input type="password" id="login-pass" class="input-field" placeholder="Enter your password">
         </div>
-
         <button id="btn-login" class="btn-main btn-login-action" onclick="Auth.login()">LOGIN</button>
         <button id="btn-register" class="btn-main btn-secondary" onclick="Auth.register()">CREATE NEW ACCOUNT</button>
-
         <div class="divider"><span>OR</span></div>
         <button id="btn-guest" class="btn-main btn-guest" onclick="Auth.loginGuest()">PLAY AS GUEST</button>
     </div>
 </div>
 
-<!-- ═════════════════════════════════════════════
-     LOBBY SCREEN
-═════════════════════════════════════════════ -->
 <div id="lobby-screen" class="screen">
-
-    <!-- Topbar -->
     <div class="topbar">
         <div class="user-profile" onclick="UI.toggleProfile()">
             <div class="user-avatar" id="avatar-display"><i class="fas fa-user"></i></div>
             <div class="user-info">
                 <div class="user-name" id="display-username">Player</div>
-                <div class="level-text" id="display-level">
-                    Lv 1 <span>0 / 200 XP</span>
-                </div>
+                <div class="level-text" id="display-level">Lv 1 <span>0 / 200 XP</span></div>
                 <div class="xp-bar-bg" id="xp-bar-container">
                     <div class="xp-bar-fill" id="xp-fill"></div>
                 </div>
             </div>
         </div>
-
-        <div class="topbar-center">⚡ ARENA</div>
-
+        <div class="topbar-center">ARENA</div>
         <div class="topbar-right">
             <div class="server-status-badge">
                 <span class="dot-status dot-online"></span>
                 <span id="server-status">ONLINE</span>
             </div>
-            <button class="btn-topbar btn-dashboard" onclick="window.open('dashboard.html','_blank')">📊 DASHBOARD</button>
+            <button class="btn-topbar btn-dashboard" onclick="window.open('dashboard.html','_blank')">DASHBOARD</button>
             <button class="btn-topbar btn-logout" onclick="Auth.logout()">LOGOUT</button>
         </div>
     </div>
 
-    <!-- Main area: 4 panels -->
-    <div class="lobby-main" style="padding-top:70px; padding-bottom:70px;">
+    <div class="lobby-main">
         <div class="panels-grid">
-
-            <!-- PANEL: ROOM -->
             <div class="panel-card pc-room">
                 <div class="panel-head">
                     <div class="panel-icon-wrap"><i class="fas fa-chess-rook"></i></div>
@@ -886,38 +368,24 @@
                             <div class="rs-lbl">Spektator</div>
                         </div>
                     </div>
-                    <div id="room-player-slots">
-                        <div class="player-slot slot-filled">
-                            <span class="slot-dot on"></span>
-                            <span class="slot-name" id="room-slot-1">Menunggu...</span>
-                        </div>
-                        <div class="player-slot slot-empty">
-                            <span class="slot-dot off"></span>
-                            <span class="slot-name">Slot kosong</span>
-                        </div>
-                    </div>
-                    <div class="spectator-row">👁️ <span id="room-spectators">0</span> sedang menonton</div>
-                    <button class="btn-room-start" onclick="Game.startMatch()">▶ MASUK ROOM</button>
+                    <button class="btn-room-action" onclick="Game.enterRoom()">MASUK ROOM</button>
                 </div>
             </div>
 
-            <!-- PANEL: VS AI -->
             <div class="panel-card pc-ai">
                 <div class="panel-head">
                     <div class="panel-icon-wrap"><i class="fas fa-robot"></i></div>
                     <div class="panel-label">VS AI</div>
-                    <span class="panel-badge new-badge">✨ BARU</span>
+                    <span class="new-badge">BARU</span>
                 </div>
                 <div class="panel-body">
-                    <div style="font-size:11px; color:var(--text3); margin-bottom:10px;">
-                        Latihan tanpa tekanan. Pilih tingkat kesulitan:
-                    </div>
+                    <div style="font-size:11px; color:var(--text3); margin-bottom:12px; font-weight:600;">Latihan tanpa tekanan:</div>
                     <div class="ai-list">
                         <div class="ai-row" onclick="Game.startVsAI('easy')">
                             <span class="ai-row-icon">🐢</span>
                             <div>
                                 <div class="ai-row-name">MUDAH</div>
-                                <div class="ai-row-desc">Reaksi AI ~600ms</div>
+                                <div class="ai-row-desc">Reaksi AI ~600MS</div>
                             </div>
                             <span class="ai-diff diff-easy">EASY</span>
                         </div>
@@ -925,7 +393,7 @@
                             <span class="ai-row-icon">⚡</span>
                             <div>
                                 <div class="ai-row-name">SULIT</div>
-                                <div class="ai-row-desc">Reaksi AI ~250ms</div>
+                                <div class="ai-row-desc">Reaksi AI ~250MS</div>
                             </div>
                             <span class="ai-diff diff-hard">HARD</span>
                         </div>
@@ -933,42 +401,32 @@
                 </div>
             </div>
 
-            <!-- PANEL: LEADERBOARD -->
             <div class="panel-card pc-lb">
                 <div class="panel-head">
                     <div class="panel-icon-wrap"><i class="fas fa-trophy"></i></div>
                     <div class="panel-label">LEADERBOARD</div>
-                    <span class="panel-badge" style="background:#E3F2FD;color:var(--blue-dark);border:1.5px solid #90CAF9;">GLOBAL</span>
                 </div>
                 <div class="panel-body">
                     <div class="lb-rows" id="leaderboard-mini">
-                        <!-- diisi oleh JS / WebSocket -->
-                        <div style="font-size:11px;color:var(--text3);text-align:center;padding:20px 0;">
-                            Memuat data...
-                        </div>
+                        <div class="empty-state">Belum ada data</div>
                     </div>
                 </div>
             </div>
 
-            <!-- PANEL: STATISTIK -->
             <div class="panel-card pc-stat" onclick="window.open('dashboard.html','_blank')">
                 <div class="panel-head">
                     <div class="panel-icon-wrap"><i class="fas fa-chart-bar"></i></div>
                     <div class="panel-label">STATISTIK</div>
-                    <span class="panel-badge" style="background:var(--purple-light);color:var(--purple-dark);border:1.5px solid #CE93D8;">PRIBADI</span>
                 </div>
                 <div class="panel-body">
-                    <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Performa kamu (sesi terakhir)</div>
                     <div class="stat-mini-grid">
                         <div class="stat-mini">
                             <div class="sm-val" id="lobby-stat-avg">---</div>
                             <div class="sm-lbl">Avg Reaksi</div>
-                            <div class="sm-trend trend-up" id="lobby-stat-avg-trend"></div>
                         </div>
                         <div class="stat-mini">
                             <div class="sm-val" id="lobby-stat-best">---</div>
                             <div class="sm-lbl">Best Time</div>
-                            <div class="sm-trend trend-up">🏅 PR</div>
                         </div>
                         <div class="stat-mini">
                             <div class="sm-val" id="lobby-stat-wr">--</div>
@@ -979,94 +437,120 @@
                             <div class="sm-lbl">Match</div>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:var(--purple);margin-top:10px;text-align:center;">
-                        📊 Klik untuk lihat detail →
-                    </div>
+                    <div class="click-hint">Klik untuk detail</div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- Find Match button -->
-    <div class="find-match-wrap">
-        <button id="start-btn" onclick="Game.startMatch()">⚔️ FIND MATCH</button>
-        <div id="lobby-status">Klik untuk cari lawan!</div>
-    </div>
-
-    <!-- Sidebar (Chat + Players Online) -->
     <div class="lobby-sidebar">
         <div class="sidebar-tabs">
             <button class="stab active" onclick="switchTab('chat',this)">CHAT</button>
             <button class="stab" onclick="switchTab('players',this)">ONLINE</button>
         </div>
-
-        <!-- Chat tab -->
         <div class="stab-content active" id="tab-chat">
             <div class="chat-msgs">
                 <div id="chat-box">
-                    <div class="chat-msg" style="background:#E3F2FD;">
-                        <span class="chat-msg-meta" style="color:#1565C0;">System:</span>
-                        Selamat datang di Reaction Duel! 🎮
+                    <div class="chat-msg" style="background:var(--teal-light);">
+                        <span class="chat-msg-meta" style="color:var(--teal-dark);">System:</span>
+                        Selamat datang di Reaction Duel!
                     </div>
                 </div>
             </div>
             <div class="chat-send-row">
                 <input id="chat-input" type="text" placeholder="Ketik pesan..." onkeypress="Chat.handleKey(event)">
-                <button class="chat-send-btn" onclick="Chat.sendFromBtn()">
-                    <i class="fas fa-paper-plane"></i>
+                <button class="chat-send-btn" onclick="Chat.send()">
+                    <i class="fas fa-paper-plane"></i> KIRIM
                 </button>
             </div>
         </div>
-
-        <!-- Players Online tab -->
         <div class="stab-content" id="tab-players">
             <div class="players-list-wrap">
                 <div id="player-list-container">
-                    <div style="font-size:11px;color:var(--text3);text-align:center;padding:20px 0;">
-                        Memuat pemain...
-                    </div>
+                    <div class="empty-state">Memuat pemain...</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- ═════════════════════════════════════════════
-     GAME SCREEN
-═════════════════════════════════════════════ -->
-<div id="game-screen" class="screen">
-    <div id="game-ui-top">
-        <button class="btn-exit" onclick="Game.backToLobby()">← EXIT</button>
-        <div id="round-indicator">MATCH 1 / 5</div>
-        <div id="mode-indicator">MULTIPLAYER</div>
+<div id="room-waiting-screen" class="screen">
+    <div class="topbar">
+        <div class="topbar-center" style="width:100%; text-align:center;">DI DALAM ROOM</div>
     </div>
+    <div class="room-waiting-container">
+        <div class="rw-box">
+            <div class="rw-title"><i class="fas fa-info-circle"></i> HOW TO PLAY</div>
+            <div class="tutorial-box">
+                <div class="tut-item">
+                    <div class="tut-icon tut-good"><i class="fas fa-recycle"></i></div>
+                    <div>Klik item hijau = <span style="font-weight:800; color:var(--green)">+100 poin</span></div>
+                </div>
+                <div class="tut-item">
+                    <div class="tut-icon tut-bad"><i class="fas fa-bomb"></i></div>
+                    <div>Hindari bom = <span style="font-weight:800; color:var(--red)">-50 poin</span></div>
+                </div>
+                <div class="tut-item">
+                    <div class="tut-icon tut-bonus"><i class="fas fa-gem"></i></div>
+                    <div>Klik item emas = <span style="font-weight:800; color:var(--gold)">+250 poin</span></div>
+                </div>
+                <div class="tut-item">
+                    <div class="tut-icon" style="color:var(--text2)"><i class="fas fa-clock"></i></div>
+                    <div>Item bergerak dan waktu terbatas!</div>
+                </div>
+            </div>
+        </div>
 
+        <div class="rw-box">
+            <div class="rw-title"><i class="fas fa-users"></i> PEMAIN DI ROOM (<span id="room-count-waiting">1</span>/4)</div>
+            <div class="slots-grid" id="room-slots-grid">
+                <!-- Slots generated by JS -->
+            </div>
+
+            <div class="spectator-box">
+                <div class="rw-title" style="font-size:12px; margin-bottom:8px;"><i class="fas fa-eye"></i> SPECTATORS (<span id="spec-count-waiting">0</span>)</div>
+                <div id="spectator-list" class="spec-list">
+                    <div style="font-size:11px; color:var(--text3);">Belum ada penonton.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rw-actions">
+            <button class="btn-rw btn-leave-room" onclick="Game.leaveRoom()">LEAVE ROOM</button>
+            <button class="btn-rw btn-find-match" id="btn-find-match-waiting" onclick="Game.startMatch()">START GAME</button>
+        </div>
+    </div>
+</div>
+
+<div id="game-screen" class="screen">
+    <video autoplay muted loop id="bg-video-game">
+        <source src="asset/backgrounds.mp4" type="video/mp4">
+    </video>
+
+    <div id="game-ui-top">
+        <button class="btn-exit" onclick="Game.exitGame()">EXIT</button>
+        <div id="round-indicator">MATCH 1 / 5</div>
+        <div class="timer-display" id="game-timer">--</div>
+    </div>
+    <div id="combo-display">COMBO x<span id="combo-val">0</span></div>
+    
     <div id="ready-room" class="ready-room">
-        <div class="msg-main" style="font-size:2rem; color:#00E5FF; margin-bottom:20px;">MATCH FOUND!</div>
+        <h2 style="color:var(--teal); margin-bottom:20px; font-size:1.8rem;">MATCH FOUND!</h2>
         <div class="match-vs">
             <div class="player-card is-me">
-                <h3 style="color:#00E5FF;">YOU</h3>
-                <div class="user-avatar" style="margin:10px auto;width:60px;height:60px;font-size:1.5rem;">
-                    <i class="fas fa-user"></i>
-                </div>
+                <h3 style="color:var(--green)">YOU</h3>
+                <div class="user-avatar" style="margin:10px auto; width:50px; height:50px;"><i class="fas fa-user"></i></div>
                 <div id="ready-status-me" class="status-dot"></div>
-                <div id="ready-text-me" style="font-size:9px;margin-top:5px;font-family:'Press Start 2P',monospace;color:#aaa;">NOT READY</div>
             </div>
-            <div style="font-size:2.5rem;font-weight:900;color:#fff;font-family:'Press Start 2P',monospace;">VS</div>
+            <div style="font-size:2rem; font-weight:900; color:var(--text);">VS</div>
             <div class="player-card">
-                <h3 id="opponent-name" style="color:#aaa;">Opponent</h3>
-                <div class="user-avatar" style="margin:10px auto;width:60px;height:60px;background:#444;font-size:1.5rem;">
-                    <i class="fas fa-robot"></i>
-                </div>
+                <h3 id="opponent-name" style="color:var(--text2)">OPPONENT</h3>
+                <div class="user-avatar" style="margin:10px auto; width:50px; height:50px; background:#ccc;"><i class="fas fa-robot"></i></div>
                 <div id="ready-status-opp" class="status-dot"></div>
-                <div id="ready-text-opp" style="font-size:9px;margin-top:5px;font-family:'Press Start 2P',monospace;color:#aaa;">WAITING...</div>
             </div>
         </div>
         <button id="btn-ready-confirm" class="btn-ready" onclick="Game.confirmReady()">I AM READY</button>
     </div>
-
-    <div id="combo-display">COMBO x<span id="combo-val">0</span></div>
 
     <div id="game-area" class="state-wait">
         <div class="color-overlay"></div>
@@ -1076,88 +560,47 @@
         </div>
         <div id="trash-container"></div>
     </div>
-
     <div id="stats-panel">
-        <div class="stat-box">
-            <div class="stat-val" id="stat-avg">---</div>
-            <div class="stat-lbl">Avg</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-val" id="stat-best">---</div>
-            <div class="stat-lbl">Best</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-val" id="stat-score" style="color:var(--gold)">0</div>
-            <div class="stat-lbl">Score</div>
-        </div>
+        <div class="stat-box"><div class="stat-val" id="stat-avg">---</div><div class="stat-lbl">Avg</div></div>
+        <div class="stat-box"><div class="stat-val" id="stat-best">---</div><div class="stat-lbl">Best</div></div>
+        <div class="stat-box"><div class="stat-val" id="stat-score" style="color:var(--gold)">0</div><div class="stat-lbl">Score</div></div>
     </div>
 </div>
 
-<!-- ═════════════════════════════════════════════
-     RESULT MODAL
-═════════════════════════════════════════════ -->
 <div id="result-modal">
     <div class="result-box">
         <div class="result-title">MATCH ENDED</div>
         <div class="result-row"><span>Result</span><span id="res-mode">Victory</span></div>
-        <div class="result-row"><span>Score</span><span id="res-score" style="color:var(--gold);font-size:1.4rem;">0</span></div>
+        <div class="result-row"><span>Score</span><span id="res-score" style="color:var(--gold);font-size:1.3rem;">0</span></div>
         <div class="result-row"><span>XP Earned</span><span id="res-xp" style="color:var(--green)">+0 XP</span></div>
         <div class="result-row"><span>Avg Reaction</span><span id="res-avg">---</span></div>
         <div class="result-actions">
-            <button class="btn-result-main" onclick="UI.retryGame()">⚔️ PLAY AGAIN</button>
-            <button class="btn-result-sec" onclick="Game.backToLobby()">← BACK TO LOBBY</button>
+            <button class="btn-result-main" onclick="UI.retryGame()">PLAY AGAIN</button>
+            <button class="btn-result-sec" onclick="Game.backToLobby()">BACK TO LOBBY</button>
         </div>
     </div>
 </div>
 
-<!-- ═════════════════════════════════════════════
-     PROFILE / ICON MODAL
-═════════════════════════════════════════════ -->
 <div id="profile-modal" onclick="UI.toggleProfile()">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-title">MY PROFILE</div>
-        <div style="margin-bottom:16px;">
-            <div id="profile-level" style="color:var(--gold);font-family:'Press Start 2P',monospace;font-size:11px;">Level 1</div>
+        <div style="margin-bottom:18px;">
+            <div id="profile-level" style="color:var(--gold);font-size:14px;font-weight:800;">Level 1</div>
             <div id="profile-next-unlock" style="font-size:11px;color:var(--text3);margin-top:4px;">Next Unlock: Level 2</div>
         </div>
         <div id="icon-grid" class="icon-grid"></div>
-        <button class="btn-close-modal" onclick="UI.toggleProfile()">✕ CLOSE</button>
+        <button class="btn-close-modal" onclick="UI.toggleProfile()">CLOSE</button>
     </div>
 </div>
 
 <script>
-// ── Tab switcher ──────────────────────────────────────────
 function switchTab(name, btn) {
     document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.stab-content').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + name).classList.add('active');
 }
-
-// ── Tutorial helpers ──────────────────────────────────────
-function showTutorial() {
-    document.getElementById('tutorial-overlay').classList.add('show');
-}
-function closeTutorial() {
-    document.getElementById('tutorial-overlay').classList.remove('show');
-}
-function startTutorialVsAI() {
-    closeTutorial();
-    if (typeof Game !== 'undefined') Game.startVsAI('easy');
-}
-
-// ── Chat send button ──────────────────────────────────────
-const Chat = window.Chat || {};
-Chat.sendFromBtn = function() {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    const e = new KeyboardEvent('keypress', { key: 'Enter' });
-    Object.defineProperty(e, 'key', { value: 'Enter' });
-    input.dispatchEvent(e);
-    if (typeof Chat.handleKey === 'function') Chat.handleKey({ key: 'Enter' });
-};
 </script>
-
 <script src="client.js"></script>
 </body>
 </html>
