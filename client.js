@@ -1,729 +1,1237 @@
-const SERVER_URL = "wss://tester-game-part-2-production.up.railway.app";
-let socket;
-
 let AppState = {
-    user:        null,
-    isLoggedIn:  false,
-    isGuest:     false,
-
-    // Game state (diisi dari server, bukan dihitung client)
-    isGameActive:    false,
-    currentRound:    1,
-    myScore:         0,   // ← dari server, bukan dihitung client
-    opponentScore:   0,   // ← dari server
-    myCombo:         0,   // ← dari server
-    myAvgReaction:   '---',
-    myBestReaction:  '---',
-    roundStartTime:  0,
-    activeItemEls: {}
+    user: null,
+    isLoggedIn: false,
+    isGuest: false,
+    isGameActive: false,
+    isVsAI: false,
+    aiDifficulty: 'easy',
+    currentRound: 1,
+    maxRounds: 5,
+    reactionTimes: [],
+    currentScore: 0,
+    combo: 0,
+    gameIntervals: [],
+    roundTimer: null,
+    isUserReady: false,
+    isOpponentReady: false,
+    matchFound: false,
+    roomPlayers: [],
+    roomSpectators: [],
+    maxPlayers: 4
 };
 
-// ── XP & Level System (tetap di client untuk UI) ──
-const XP_REWARDS   = { WIN: 500, LOSE: 100 };
-const LEVEL_TABLE  = [
-    [1,0],[2,200],[3,600],[4,1100],[5,1700],[6,2500],[7,3500],
-    [8,4700],[9,6200],[10,8000],[11,10100],[12,12500],[13,15200],
-    [14,18200],[15,21500],[16,25100],[17,29000],[18,33200],[19,37700],[20,45000]
+const els = {};
+
+const XP_REWARDS = { WIN: 500, LOSE: 100 };
+const LEVEL_TABLE = [
+    [1, 0], [2, 200], [3, 600], [4, 1100], [5, 1700],
+    [6, 2500], [7, 3500], [8, 4700], [9, 6200], [10, 8000],
+    [11, 10100], [12, 12500], [13, 15200], [14, 18200], [15, 21500],
+    [16, 25100], [17, 29000], [18, 33200], [19, 37700], [20, 45000]
 ];
 const ICON_UNLOCKS = {
-    1:{icon:'fa-user',name:'Recruit'}, 2:{icon:'fa-robot',name:'Bot Fighter'},
-    4:{icon:'fa-cat',name:'Swift Cat'}, 6:{icon:'fa-dragon',name:'Dragonborn'},
-    8:{icon:'fa-skull',name:'Reaper'}, 10:{icon:'fa-hat-wizard',name:'Wizard'},
-    15:{icon:'fa-fire',name:'Inferno'}, 20:{icon:'fa-crown',name:'Legend'}
+    1: { icon: 'fa-user', name: 'Recruit' },
+    2: { icon: 'fa-robot', name: 'Bot Fighter' },
+    4: { icon: 'fa-cat', name: 'Swift Cat' },
+    6: { icon: 'fa-dragon', name: 'Dragonborn' },
+    8: { icon: 'fa-skull', name: 'Reaper' },
+    10: { icon: 'fa-hat-wizard', name: 'Wizard' },
+    15: { icon: 'fa-fire', name: 'Inferno' },
+    20: { icon: 'fa-crown', name: 'Legend' }
 };
 
 function getLevelData(totalXP) {
-    let currentLevel=1, nextXP=0, currentLevelXP=0;
-    for (let i=0; i<LEVEL_TABLE.length; i++) {
+    let currentLevel = 1;
+    let nextXP = 0;
+    let currentLevelXP = 0;
+    for (let i = 0; i < LEVEL_TABLE.length; i++) {
         if (totalXP >= LEVEL_TABLE[i][1]) {
-            currentLevel=LEVEL_TABLE[i][0]; currentLevelXP=LEVEL_TABLE[i][1];
-            nextXP = (i+1<LEVEL_TABLE.length) ? LEVEL_TABLE[i+1][1] : LEVEL_TABLE[i][1];
+            currentLevel = LEVEL_TABLE[i][0];
+            currentLevelXP = LEVEL_TABLE[i][1];
+            nextXP = (i + 1 < LEVEL_TABLE.length) ? LEVEL_TABLE[i + 1][1] : LEVEL_TABLE[i][1];
         } else break;
     }
-    const progressXP = totalXP - currentLevelXP;
-    const neededXP   = Math.max(1, nextXP - currentLevelXP);
-    return { level:currentLevel, currentXP:totalXP, progressXP, neededXP,
-             progressPercent:(progressXP/neededXP)*100 };
+    let progressXP = totalXP - currentLevelXP;
+    let neededXP = nextXP - currentLevelXP;
+    if (neededXP <= 0) neededXP = 1;
+    return {
+        level: currentLevel,
+        currentXP: totalXP,
+        levelXP: currentLevelXP,
+        nextXP: nextXP,
+        progressXP: progressXP,
+        neededXP: neededXP,
+        progressPercent: (progressXP / neededXP) * 100
+    };
 }
 
-// ── DOM Elements ──────────────────────────────────────────────
-const els = {};
 function initDOM() {
-    if (!document.getElementById('login-screen')) return;
-    const ids = [
-        'login-screen','lobby-screen','game-screen',
-        'login-id','login-pass','login-error',
-        'btn-login','btn-register','btn-guest',
-        'display-username','display-level','xp-bar-container','xp-fill','avatar-display',
-        'player-list-container','start-btn','lobby-status',
-        'chat-box','chat-input','server-status',
-        'round-indicator','mode-indicator','game-area','trash-container',
-        'center-msg-main','center-msg-sub',
-        'stat-avg','stat-best','stat-score',
-        'combo-display','combo-val',
-        'ready-room','btn-ready-confirm','opponent-name',
-        'ready-status-me','ready-text-me','ready-status-opp','ready-text-opp',
-        'result-modal','res-score','res-avg','res-best','res-mode','res-xp',
-        'profile-modal','icon-grid','profile-level','profile-next-unlock'
-    ];
-    const keyMap = {
-        'login-screen':'login','lobby-screen':'lobby','game-screen':'game',
-        'login-id':'idInput','login-pass':'passInput','login-error':'loginError',
-        'btn-login':'btnLogin','btn-register':'btnRegister','btn-guest':'btnGuest',
-        'display-username':'displayUser','display-level':'displayLvl',
-        'xp-bar-container':'xpBarContainer','xp-fill':'xpFill','avatar-display':'avatar',
-        'player-list-container':'playerList','start-btn':'startBtn','lobby-status':'lobbyStatus',
-        'chat-box':'chatBox','chat-input':'chatInput','server-status':'serverStatus',
-        'round-indicator':'roundInd','mode-indicator':'modeInd',
-        'game-area':'gameArea','trash-container':'trashContainer',
-        'center-msg-main':'msgMain','center-msg-sub':'msgSub',
-        'stat-avg':'statAvg','stat-best':'statBest','stat-score':'statScore',
-        'combo-display':'comboDisplay','combo-val':'comboVal',
-        'ready-room':'readyRoom','btn-ready-confirm':'btnReadyConfirm',
-        'opponent-name':'opponentName','ready-status-me':'readyStatusMe',
-        'ready-text-me':'readyTextMe','ready-status-opp':'readyStatusOpp',
-        'ready-text-opp':'readyTextOpp','result-modal':'resModal',
-        'res-score':'resScore','res-avg':'resAvg','res-best':'resBest',
-        'res-mode':'resMode','res-xp':'resXP','profile-modal':'profileModal',
-        'icon-grid':'iconGrid','profile-level':'profileLevel',
-        'profile-next-unlock':'profileNextUnlock'
-    };
-    ids.forEach(id => {
-        const key = keyMap[id] || id;
-        els[key] = document.getElementById(id);
-    });
+    if (document.getElementById('login-screen')) {
+        els.login = document.getElementById('login-screen');
+        els.lobby = document.getElementById('lobby-screen');
+        els.roomWaiting = document.getElementById('room-waiting-screen');
+        els.game = document.getElementById('game-screen');
+        els.idInput = document.getElementById('login-id');
+        els.passInput = document.getElementById('login-pass');
+        els.loginError = document.getElementById('login-error');
+        els.btnLogin = document.getElementById('btn-login');
+        els.btnRegister = document.getElementById('btn-register');
+        els.btnGuest = document.getElementById('btn-guest');
+        els.displayUser = document.getElementById('display-username');
+        els.displayLvl = document.getElementById('display-level');
+        els.xpBarContainer = document.getElementById('xp-bar-container');
+        els.xpFill = document.getElementById('xp-fill');
+        els.avatar = document.getElementById('avatar-display');
+        els.playerList = document.getElementById('player-list-container');
+        els.chatBox = document.getElementById('chat-box');
+        els.chatInput = document.getElementById('chat-input');
+        els.serverStatus = document.getElementById('server-status');
+        els.roundInd = document.getElementById('round-indicator');
+        els.gameArea = document.getElementById('game-area');
+        els.trashContainer = document.getElementById('trash-container');
+        els.msgMain = document.getElementById('center-msg-main');
+        els.msgSub = document.getElementById('center-msg-sub');
+        els.statAvg = document.getElementById('stat-avg');
+        els.statBest = document.getElementById('stat-best');
+        els.statScore = document.getElementById('stat-score');
+        els.comboDisplay = document.getElementById('combo-display');
+        els.comboVal = document.getElementById('combo-val');
+        els.resModal = document.getElementById('result-modal');
+        els.resScore = document.getElementById('res-score');
+        els.resAvg = document.getElementById('res-avg');
+        els.resMode = document.getElementById('res-mode');
+        els.resXP = document.getElementById('res-xp');
+        els.profileModal = document.getElementById('profile-modal');
+        els.iconGrid = document.getElementById('icon-grid');
+        els.profileLevel = document.getElementById('profile-level');
+        els.profileNextUnlock = document.getElementById('profile-next-unlock');
+        els.leaderboardMini = document.getElementById('leaderboard-mini');
+        els.lobbyStatAvg = document.getElementById('lobby-stat-avg');
+        els.lobbyStatBest = document.getElementById('lobby-stat-best');
+        els.lobbyStatWR = document.getElementById('lobby-stat-wr');
+        els.lobbyStatMatches = document.getElementById('lobby-stat-matches');
+        els.roomPlayerCount = document.getElementById('room-player-count');
+        els.roomSpecCount = document.getElementById('room-spec-count');
+        els.roomSlotsGrid = document.getElementById('room-slots-grid');
+        els.roomCountWaiting = document.getElementById('room-count-waiting');
+        els.specCountWaiting = document.getElementById('spec-count-waiting');
+        els.spectatorList = document.getElementById('spectator-list');
+        els.btnFindMatchWaiting = document.getElementById('btn-find-match-waiting');
+        els.gameTimer = document.getElementById('game-timer');
+    }
+    if (document.getElementById('sum-sessions')) {
+        els.sumSessions = document.getElementById('sum-sessions');
+        els.sumAvg = document.getElementById('sum-avg');
+        els.sumBest = document.getElementById('sum-best');
+        els.histList = document.getElementById('history-list');
+        els.chartTrend = document.getElementById('chart-trend');
+    }
 }
 
 function showScreen(name) {
+    if (!els[name]) return;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    if (els[name]) els[name].classList.add('active');
+    els[name].classList.add('active');
+
+    // Manage game background video
+    const gameScreen = document.getElementById('game-screen');
+    let gameVideoBg = document.getElementById('game-bg-video');
+
+    if (name === 'game') {
+        if (!gameVideoBg) {
+            gameVideoBg = document.createElement('video');
+            gameVideoBg.id = 'game-bg-video';
+            gameVideoBg.autoplay = true;
+            gameVideoBg.muted = true;
+            gameVideoBg.loop = true;
+            gameVideoBg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;opacity:0.25;pointer-events:none;';
+            const source = document.createElement('source');
+            source.src = 'asset/backgrounds.mp4';
+            source.type = 'video/mp4';
+            gameVideoBg.appendChild(source);
+            gameScreen.insertBefore(gameVideoBg, gameScreen.firstChild);
+        }
+        gameVideoBg.play().catch(() => {});
+    } else {
+        if (gameVideoBg) gameVideoBg.pause();
+    }
 }
 
-// ============================================================
-//  AUTH — Gunakan WebSocket ke server, HAPUS localStorage
-// ============================================================
+function getLocalStorageUsers() { return JSON.parse(localStorage.getItem('rduel_users') || '{}'); }
+function saveLocalStorageUsers(data) { localStorage.setItem('rduel_users', JSON.stringify(data)); }
+function getCurrentUser() { return JSON.parse(sessionStorage.getItem('rduel_current') || 'null'); }
+function saveCurrentUser(user) { sessionStorage.setItem('rduel_current', JSON.stringify(user)); }
+function clearCurrentUser() { sessionStorage.removeItem('rduel_current'); }
+
+function findUser(identifier) {
+    const users = getLocalStorageUsers();
+    if (users[identifier]) return users[identifier];
+    const foundKey = Object.keys(users).find(key => users[key].email === identifier);
+    return foundKey ? users[foundKey] : null;
+}
+
+function updateUserInDB(user) {
+    if (!user || user.type === 'guest') return;
+    const users = getLocalStorageUsers();
+    const key = Object.keys(users).find(k => users[k].username === user.username) || user.username;
+    users[key] = user;
+    saveLocalStorageUsers(users);
+}
+
 const Auth = {
     login: () => {
-        const id   = els.idInput?.value.trim();
-        const pass = els.passInput?.value;
-        if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi username/email dan password!"; return; }
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
-            // Koneksi dulu, lalu login
-            Network.connect(() => Auth.sendLogin(id, pass));
+        const id = els.idInput.value.trim();
+        const pass = els.passInput.value;
+        if (!id || !pass) { els.loginError.textContent = "Mohon isi Username/Email dan Password!"; return; }
+        const user = findUser(id);
+        if (user && user.password === pass) {
+            AppState.user = user;
+            AppState.isGuest = false;
+            AppState.isLoggedIn = true;
+            saveCurrentUser(AppState.user);
+            Auth.onSuccess();
         } else {
-            Auth.sendLogin(id, pass);
+            els.loginError.textContent = "Akun tidak ditemukan atau password salah.";
         }
-    },
-    sendLogin: (id, pass) => {
-        Network.send({ type: 'AUTH_LOGIN', identifier: id, password: pass });
-        if(els.btnLogin) { els.btnLogin.textContent = "Masuk..."; els.btnLogin.disabled = true; }
     },
     register: () => {
-        const id   = els.idInput?.value.trim();
-        const pass = els.passInput?.value;
-        if (!id || !pass) { if(els.loginError) els.loginError.textContent = "Isi semua field!"; return; }
-        const isEmail    = id.includes('@');
-        const username   = isEmail ? id.split('@')[0] : id;
-        const email      = isEmail ? id : '';
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
-            Network.connect(() => Network.send({ type: 'AUTH_REGISTER', username, email, password: pass }));
-        } else {
-            Network.send({ type: 'AUTH_REGISTER', username, email, password: pass });
-        }
-        if(els.btnRegister) { els.btnRegister.textContent = "Daftar..."; els.btnRegister.disabled = true; }
+        const id = els.idInput.value.trim();
+        const pass = els.passInput.value;
+        if (!id || !pass) { els.loginError.textContent = "Mohon isi semua field!"; return; }
+        const existing = findUser(id);
+        if (existing) { els.loginError.textContent = "Username atau Email sudah terdaftar!"; return; }
+        const isEmail = id.includes('@');
+        const displayUsername = isEmail ? id.split('@')[0] : id;
+        const newUser = {
+            username: displayUsername,
+            email: isEmail ? id : '',
+            password: pass,
+            level: 1,
+            icon: 'fa-user',
+            gamesPlayed: 0,
+            totalXP: 0,
+            bestTime: null
+        };
+        const users = getLocalStorageUsers();
+        users[displayUsername] = newUser;
+        saveLocalStorageUsers(users);
+        AppState.user = newUser;
+        AppState.isGuest = false;
+        AppState.isLoggedIn = true;
+        saveCurrentUser(AppState.user);
+        Auth.onSuccess();
     },
     loginGuest: () => {
-        const randomId  = Math.floor(Math.random() * 10000);
-        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost', level: 1, totalXP: 0 };
-        AppState.user    = guestUser;
+        const randomId = Math.floor(Math.random() * 10000);
+        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost' };
+        AppState.user = guestUser;
         AppState.isGuest = true;
         AppState.isLoggedIn = true;
-        sessionStorage.setItem('rduel_current', JSON.stringify(guestUser));
+        saveCurrentUser(AppState.user);
         Auth.onSuccess();
-        // Guest: koneksi WebSocket untuk chat & matchmaking
-        Network.connect();
     },
     onSuccess: () => {
-        if(els.loginError) els.loginError.textContent = '';
+        els.loginError.textContent = "";
         showScreen('lobby');
         UI.updateProfileUI();
         UI.initIconPicker();
+        UI.loadLobbyStats();
+        UI.updateRoomUI();
+        Network.connect();
     },
     checkSession: () => {
-        const saved = sessionStorage.getItem('rduel_current');
-        if (saved) {
-            AppState.user = JSON.parse(saved);
+        const user = getCurrentUser();
+        if (user) {
+            AppState.user = user;
             AppState.isLoggedIn = true;
-            AppState.isGuest    = (AppState.user.type === 'guest');
-            Auth.onSuccess();
+            AppState.isGuest = (user.type === 'guest');
+            showScreen('lobby');
+            UI.updateProfileUI();
+            UI.initIconPicker();
+            UI.loadLobbyStats();
+            UI.updateRoomUI();
             Network.connect();
         } else {
             showScreen('login');
         }
     },
     logout: () => {
-        sessionStorage.removeItem('rduel_current');
-        if (socket) socket.close();
+        clearCurrentUser();
         location.reload();
     }
 };
 
-// ============================================================
-//  NETWORK — WebSocket handler
-// ============================================================
-const Network = {
-    connect: (onOpenCallback = null) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            if (onOpenCallback) onOpenCallback();
-            return;
-        }
-        socket = new WebSocket(SERVER_URL);
-
-        socket.onopen = () => {
-            console.log("[WS] Terhubung ke server!");
-            if(els.serverStatus) els.serverStatus.textContent = "ONLINE";
-            // Kirim JOIN ke server agar masuk player list
-            if (AppState.user) {
-                Network.send({
-                    type:    'JOIN',
-                    username: AppState.user.username,
-                    icon:    AppState.user.icon || 'fa-user',
-                    isGuest: AppState.isGuest
-                });
-            }
-            if (onOpenCallback) onOpenCallback();
-        };
-
-        socket.onmessage = (event) => {
-            try { Network.handleMessage(JSON.parse(event.data)); }
-            catch (e) { console.error("[WS] Parse error:", e); }
-        };
-
-        socket.onerror = () => {
-            if(els.serverStatus) els.serverStatus.textContent = "ERROR";
-            console.error("[WS] Koneksi error");
-        };
-
-        socket.onclose = () => {
-            if(els.serverStatus) els.serverStatus.textContent = "OFFLINE";
-            console.log("[WS] Koneksi ditutup");
-        };
-    },
-
-    send: (data) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify(data));
-        } else {
-            console.warn("[WS] Tidak bisa kirim, socket belum siap:", data.type);
-        }
-    },
-
-    // ── Router pesan dari server ──────────────────────────────
-    handleMessage: (msg) => {
-        switch (msg.type) {
-
-            // Auth
-            case 'AUTH_RESULT':
-                if (msg.success) {
-                    AppState.user = msg.user;
-                    AppState.isGuest = false;
-                    AppState.isLoggedIn = true;
-                    sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
-                    Auth.onSuccess();
-                    // FIX#4: JOIN was not sent after AUTH_RESULT — send it now
-                    Network.send({ type:'JOIN', username:msg.user.username, icon:msg.user.icon||'fa-user', isGuest:false });
-                    // Request leaderboard for lobby panel
-                    Network.send({ type: 'get_leaderboard' });
-                    showTutorial();
-                } else {
-                    if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnLogin)   { els.btnLogin.textContent = "LOGIN"; els.btnLogin.disabled = false; }
-                }
-                break;
-
-            case 'REGISTER_RESULT':
-                if (msg.success) {
-                    AppState.user = msg.user;
-                    AppState.isGuest = false;
-                    AppState.isLoggedIn = true;
-                    sessionStorage.setItem('rduel_current', JSON.stringify(msg.user));
-                    Auth.onSuccess();
-                    // FIX#4: send JOIN after register
-                    Network.send({ type:'JOIN', username:msg.user.username, icon:msg.user.icon||'fa-user', isGuest:false });
-                    Network.send({ type: 'get_leaderboard' });
-                    // FIX#11: show tutorial for new account
-                    if (typeof showTutorial === 'function') showTutorial();
-                } else {
-                    if(els.loginError) els.loginError.textContent = msg.message;
-                    if(els.btnRegister) { els.btnRegister.textContent = "DAFTAR"; els.btnRegister.disabled = false; }
-                }
-                break;
-
-            // Lobby
-            case 'PLAYER_LIST':
-                UI.renderPlayerList(msg.players);
-                break;
-
-            case 'CHAT_MESSAGE':
-                UI.appendChat(msg.username, msg.message, msg.time);
-                break;
-
-            // Matchmaking
-            case 'MATCH_SEARCHING':
-                if(els.lobbyStatus) els.lobbyStatus.textContent = "Mencari lawan...";
-                break;
-
-            case 'MATCH_FOUND':
-                Game.showReadyRoom(msg.opponent, msg.opponentIcon);
-                break;
-
-            case 'PLAYER_READY_UPDATE':
-                if (msg.username !== AppState.user?.username) {
-                    // Lawan sudah ready
-                    if(els.readyStatusOpp) els.readyStatusOpp.className = 'status-dot ready';
-                    if(els.readyTextOpp)   els.readyTextOpp.textContent = "READY!";
-                }
-                break;
-
-            // Game flow
-            case 'START_GAME':
-                Game.onStartGame();
-                break;
-
-            case 'ROUND_UPDATE':
-                AppState.currentRound = msg.round;
-                if(els.roundInd) els.roundInd.textContent = `MATCH ${msg.round} / 5`;
-                break;
-
-            // ── SPAWN_ITEMS: server kirim daftar item ──────────
-            case 'SPAWN_ITEMS':
-                // msg.items = [{id, type, top, left, duration, round}, ...]
-                Game.renderItems(msg.items, msg.round);
-                break;
-
-            // ── ITEM_EXPIRED: server kasih tau item sudah mati ─
-            case 'ITEM_EXPIRED':
-                // msg.itemId, msg.resetCombo
-                Game.removeItemEl(msg.itemId);
-                if (msg.resetCombo) {
-                    AppState.myCombo = 0;
-                    if(els.comboDisplay) els.comboDisplay.classList.remove('show');
-                    Game.showFeedback("MISS!", "white", false);
-                }
-                break;
-
-            // ── SCORE_UPDATE: skor resmi dari server ───────────
-            case 'SCORE_UPDATE':
-                // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
-                Game.onScoreUpdate(msg);
-                break;
-
-            // ── ROUND_RESULT: hasil akhir ronde ────────────────
-            case 'ROUND_RESULT':
-                // msg = { roundWinner, scores: {playerA, playerB} }
-                Game.onRoundResult(msg);
-                break;
-
-            // Game Over
-            case 'GAME_OVER':
-                Game.onGameOver(msg.stats);
-                break;
-
-            // Leaderboard
-            case 'leaderboard_data':
-                UI.renderLeaderboard(msg.data);
-                UI.renderLobbyLeaderboard(msg.data);
-                break;
-
-            case 'SYSTEM':
-                console.log("[SYSTEM]", msg.message);
-                if(els.lobbyStatus) els.lobbyStatus.textContent = msg.message;
-                break;
-
-            case 'ERROR':
-                console.warn("[SERVER ERROR]", msg.message);
-                if(els.loginError) els.loginError.textContent = msg.message;
-                break;
-
-            default:
-                console.log("[WS] Unhandled:", msg.type);
-        }
-    }
-};
-
-// ============================================================
-//  UI — Rendering only, NO game logic
-// ============================================================
 const UI = {
     updateProfileUI: () => {
-        if (!AppState.user) return;
-        if(els.displayUser) els.displayUser.textContent = AppState.user.username;
-        if(els.avatar)      els.avatar.innerHTML = `<i class="fas ${AppState.user.icon || 'fa-user'}"></i>`;
-
+        if (!AppState.user || !els.displayUser) return;
+        els.displayUser.textContent = AppState.user.username;
         if (AppState.isGuest) {
-            if(els.displayLvl) { els.displayLvl.textContent = "Guest"; els.displayLvl.style.color = "#888"; }
-            if(els.xpBarContainer) els.xpBarContainer.style.display = "none";
+            els.displayLvl.textContent = "Guest";
+            els.displayLvl.style.color = "#888";
+            if (els.xpBarContainer) els.xpBarContainer.style.display = "none";
         } else {
-            if(els.xpBarContainer) els.xpBarContainer.style.display = "block";
-            const d = getLevelData(AppState.user.totalXP || 0);
-            if(els.displayLvl) els.displayLvl.innerHTML = `Lvl ${d.level} <span>${d.progressXP.toFixed(0)} / ${d.neededXP.toFixed(0)} XP</span>`;
-            if(els.xpFill)     els.xpFill.style.width = `${d.progressPercent}%`;
+            if (els.xpBarContainer) els.xpBarContainer.style.display = "block";
+            const totalXP = AppState.user.totalXP || 0;
+            const data = getLevelData(totalXP);
+            let lvlHtml = `Lv ${data.level} <span>${data.progressXP.toFixed(0)} / ${data.neededXP.toFixed(0)} XP</span>`;
+            if (data.level >= 20) lvlHtml = `Lv ${data.level} <span>MAX</span>`;
+            els.displayLvl.innerHTML = lvlHtml;
+            els.xpFill.style.width = `${data.progressPercent}%`;
         }
+        els.avatar.innerHTML = `<i class="fas ${AppState.user.icon}"></i>`;
     },
-
-    renderPlayerList: (players) => {
-        if (!els.playerList) return;
-        els.playerList.innerHTML = players.map(p =>
-            `<div style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center;">
-                <span><i class="fas ${p.icon||'fa-user'}" style="margin-right:8px; color:var(--teal, var(--accent-cyan))"></i>${p.name}</span>
-                <span style="color:var(--gold, var(--accent-yellow)); font-size:0.85rem;">${p.isGuest ? 'Guest' : `Lv.${p.level||1}`}</span>
-             </div>`
-        ).join('');
-    },
-
-    appendChat: (username, message, time) => {
-        if (!els.chatBox) return;
-        const div = document.createElement('div');
-        div.className = 'chat-msg';
-        div.innerHTML = `<strong>${username}:</strong> ${message} <span class="time">${time}</span>`;
-        els.chatBox.appendChild(div);
-        els.chatBox.scrollTop = els.chatBox.scrollHeight;
-    },
-
-    renderLeaderboard: (rows) => {
-        // FIX#8: actually render to lobby leaderboard panel
-        const el = document.getElementById('leaderboard-mini');
-        if (!el) return;
-        if (!rows || !rows.length) {
-            el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:16px;">Belum ada data</div>';
-            return;
-        }
-        const medals = ['🥇','🥈','🥉'];
-        el.innerHTML = rows.slice(0,4).map((r,i) => {
-            const isMe = r.username === AppState.user?.username;
-            return `<div class="lb-row${isMe?' lb-me':''}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:${isMe?'#EDE7F6':'var(--bg)'};margin-bottom:6px;border:1.5px solid ${isMe?'#D1C4E9':'var(--border)'}">
-                <span style="font-family:'Press Start 2P',monospace;font-size:10px;width:22px;text-align:center">${medals[i]||i+1}</span>
-                <span style="font-size:12px;font-weight:700;flex:1">${r.username}</span>
-                <span style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--blue)">${r.total_score??r.totalScore??0}</span>
-            </div>`;
-        }).join('');
-    },
-
     toggleProfile: () => {
-        if (els.profileModal) els.profileModal.style.display =
-            els.profileModal.style.display === 'flex' ? 'none' : 'flex';
+        if (els.profileModal) els.profileModal.style.display = els.profileModal.style.display === 'flex' ? 'none' : 'flex';
     },
-
     initIconPicker: () => {
         if (!els.iconGrid) return;
         if (AppState.isGuest) {
-            els.iconGrid.innerHTML = '<p style="color:#666; grid-column:1/-1; text-align:center;">Guest tidak punya profil.</p>';
+            els.iconGrid.innerHTML = '<div class="empty-state">Guest tidak punya profil.</div>';
+            els.profileLevel.textContent = "Guest";
+            els.profileNextUnlock.textContent = "Login untuk save progress.";
             return;
         }
-        const d = getLevelData(AppState.user.totalXP || 0);
-        if(els.profileLevel)    els.profileLevel.textContent    = `Level ${d.level} (${d.currentXP} XP)`;
-        const next = Object.entries(ICON_UNLOCKS).find(([lvl]) => lvl > d.level);
-        if(els.profileNextUnlock) els.profileNextUnlock.textContent = next ? `Next: ${next[1].name} at Lv.${next[0]}` : 'All Unlocked!';
-
+        const totalXP = AppState.user.totalXP || 0;
+        const currentData = getLevelData(totalXP);
+        els.profileLevel.textContent = `Level ${currentData.level} (${currentData.currentXP} XP)`;
+        const nextUnlock = Object.entries(ICON_UNLOCKS).find(([lvl]) => lvl > currentData.level);
+        if (nextUnlock) els.profileNextUnlock.textContent = `Next: ${nextUnlock[1].name} at Lv.${nextUnlock[0]}`;
+        else els.profileNextUnlock.textContent = "All Icons Unlocked!";
         els.iconGrid.innerHTML = '';
-        Object.entries(ICON_UNLOCKS).sort((a,b)=>a[0]-b[0]).forEach(([lvl, data]) => {
+        Object.entries(ICON_UNLOCKS).sort((a, b) => a[0] - b[0]).forEach(([lvl, data]) => {
             const div = document.createElement('div');
             div.className = 'icon-option';
-            const unlocked = d.level >= lvl;
-            if (unlocked) {
-                div.innerHTML = `<i class="fas ${data.icon}" style="font-size:1.5rem;"></i>`;
-                if (AppState.user.icon === data.icon) { div.style.background = "rgba(0,245,255,0.2)"; div.style.boxShadow = "0 0 10px var(--accent-cyan)"; }
+            const isUnlocked = currentData.level >= lvl;
+            if (isUnlocked) {
+                div.innerHTML = `<i class="fas ${data.icon}" style="font-size:1.3rem;"></i>`;
+                if (AppState.user.icon === data.icon) {
+                    div.style.background = "rgba(0, 191, 165, 0.15)";
+                    div.style.boxShadow = "0 0 10px rgba(0,191,165,.3)";
+                }
                 div.onclick = () => {
                     AppState.user.icon = data.icon;
-                    sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
-                    // Kirim update icon ke server
-                    Network.send({ type: 'UPDATE_ICON', username: AppState.user.username, icon: data.icon });
+                    saveCurrentUser(AppState.user);
+                    updateUserInDB(AppState.user);
                     UI.updateProfileUI();
                     UI.initIconPicker();
                 };
             } else {
-                div.style.opacity = "0.4"; div.style.cursor = "not-allowed"; div.style.position = "relative";
-                div.innerHTML = `<i class="fas fa-lock" style="font-size:1.2rem; color:#555;"></i><span style="position:absolute;bottom:2px;right:2px;font-size:0.6rem;color:#888;">Lv${lvl}</span>`;
+                div.innerHTML = `<i class="fas fa-lock" style="font-size:1rem; color:#aaa;"></i>`;
+                div.style.opacity = "0.5";
+                div.style.cursor = "not-allowed";
             }
             els.iconGrid.appendChild(div);
         });
     },
-
-    showResultModal: (stats) => {
+    showResultModal: () => {
         if (!els.resModal) return;
-        const me = stats?.find(p => p.username === AppState.user?.username);
-        if(els.resScore) els.resScore.textContent = me?.score       ?? AppState.myScore;
-        if(els.resAvg)   els.resAvg.textContent   = me?.avgTime     ?? AppState.myAvgReaction;
-        if(els.resBest)  els.resBest.textContent  = me?.bestTime    ?? AppState.myBestReaction;
-        if(els.resMode)  els.resMode.textContent  = "Match Finished";
-
-        // XP (dihitung berdasarkan hasil dari server)
-        if(!AppState.isGuest && me) {
-            const isWin   = stats[0]?.username === AppState.user.username;
-            const xpGained = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
-            const oldLevel  = getLevelData(AppState.user.totalXP || 0).level;
-            AppState.user.totalXP = (AppState.user.totalXP || 0) + xpGained;
-            const newLevel = getLevelData(AppState.user.totalXP).level;
-            AppState.user.level = newLevel;
-            sessionStorage.setItem('rduel_current', JSON.stringify(AppState.user));
-            if(els.resXP) { els.resXP.textContent = `+${xpGained} XP`; els.resXP.style.color = isWin ? "var(--accent-green)" : "#888"; }
-            UI.updateProfileUI();
-            if (newLevel > oldLevel) {
-                if(els.msgSub) { els.msgSub.innerHTML = `LEVEL UP! Lv.${newLevel}`; els.msgSub.style.color = "var(--accent-yellow)"; }
-            }
-        }
-
+        if (els.resMode) els.resMode.textContent = AppState.isVsAI ? "VS AI - " + AppState.aiDifficulty.toUpperCase() : "Match Finished";
+        if (els.resScore) els.resScore.textContent = AppState.currentScore;
+        const avg = AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a, b) => a + b, 0) / AppState.reactionTimes.length).toFixed(0) : '---';
+        if (els.resAvg) els.resAvg.textContent = avg + ' ms';
         els.resModal.classList.add('show');
         els.resModal.style.display = 'flex';
     },
-
-    triggerLevelUpAnimation: () => {
-        if(els.displayLvl) { els.displayLvl.classList.add('level-up-anim'); setTimeout(() => els.displayLvl.classList.remove('level-up-anim'), 600); }
-    },
-
-    // FIX#6: retryGame — called from result modal "Play Again" button
     retryGame: () => {
-        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
-        Game.startMatch();
+        if (els.resModal) {
+            els.resModal.classList.remove('show');
+            els.resModal.style.display = 'none';
+        }
+        if (AppState.isVsAI) {
+            Game.startVsAI(AppState.aiDifficulty);
+        } else {
+            Game.startMatch();
+        }
+    },
+    loadLobbyStats: () => {
+        const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
+        if (sessions.length > 0) {
+            const lastSession = sessions[0];
+            if (lastSession.players && lastSession.players[0]) {
+                const p = lastSession.players[0];
+                if (els.lobbyStatAvg) els.lobbyStatAvg.textContent = p.avgTime ? p.avgTime + 'ms' : '---';
+                if (els.lobbyStatBest) els.lobbyStatBest.textContent = p.bestTime ? p.bestTime + 'ms' : '---';
+            }
+            if (els.lobbyStatMatches) els.lobbyStatMatches.textContent = sessions.length;
+            let wins = 0;
+            sessions.forEach(s => {
+                if (s.players && s.players[0] && s.players[0].xp === 500) wins++;
+            });
+            if (els.lobbyStatWR) els.lobbyStatWR.textContent = sessions.length > 0 ? Math.round((wins / sessions.length) * 100) + '%' : '--';
+        }
+    },
+    renderLeaderboardMini: (data) => {
+        if (!els.leaderboardMini) return;
+        if (!data || data.length === 0) {
+            els.leaderboardMini.innerHTML = '<div class="empty-state">Belum ada data</div>';
+            return;
+        }
+        els.leaderboardMini.innerHTML = data.slice(0, 5).map((r, i) => {
+            const rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : 'rank-other';
+            const isMe = AppState.user && r.username === AppState.user.username;
+            return `<div class="lb-row ${isMe ? 'lb-me' : ''}">
+                <span class="lb-rank-num ${rankClass}">${i + 1}</span>
+                <div class="lb-av"><i class="fas fa-user"></i></div>
+                <span class="lb-name">${r.username}</span>
+                <span class="lb-score">${r.score || 0}</span>
+            </div>`;
+        }).join('');
+    },
+    updateRoomUI: () => {
+        if (!AppState.user) return;
+        AppState.roomPlayers = [];
+        AppState.roomSpectators = [];
+        if (els.roomPlayerCount) els.roomPlayerCount.textContent = '0';
+        if (els.roomSpecCount) els.roomSpecCount.textContent = '0';
+    },
+    renderRoomSlots: () => {
+        if (!els.roomSlotsGrid) return;
+        let html = '';
+        for (let i = 0; i < AppState.maxPlayers; i++) {
+            const player = AppState.roomPlayers[i];
+            if (player) {
+                const isMe = AppState.user && player.username === AppState.user.username;
+                html += `
+                <div class="slot-card ${isMe ? 'filled-me' : 'filled'}">
+                    <div class="slot-avatar has-user"><i class="fas ${player.icon || 'fa-user'}"></i></div>
+                    <div class="slot-info">
+                        <div class="slot-name">${player.username}${player.isBot ? ' 🤖' : ''}</div>
+                        <div class="slot-status" style="color:var(--green)">${isMe ? '⬡ Kamu' : (player.isBot ? 'Bot Siap' : 'Online')}</div>
+                    </div>
+                </div>`;
+            } else {
+                html += `
+                <div class="slot-card">
+                    <div class="slot-avatar"><i class="fas fa-user-slash"></i></div>
+                    <div class="slot-info">
+                        <div class="slot-name slot-empty-text">Slot Kosong</div>
+                        <div class="slot-status">Menunggu pemain...</div>
+                    </div>
+                </div>`;
+            }
+        }
+        els.roomSlotsGrid.innerHTML = html;
+
+        if (els.roomCountWaiting) els.roomCountWaiting.textContent = AppState.roomPlayers.length;
+        if (els.specCountWaiting) els.specCountWaiting.textContent = AppState.roomSpectators.length;
+        if (els.roomPlayerCount) els.roomPlayerCount.textContent = AppState.roomPlayers.length;
+        if (els.roomSpecCount) els.roomSpecCount.textContent = AppState.roomSpectators.length;
+
+        if (els.spectatorList) {
+            if (AppState.roomSpectators.length === 0) {
+                els.spectatorList.innerHTML = '<div style="font-size:11px; color:var(--text3);">Belum ada penonton.</div>';
+            } else {
+                els.spectatorList.innerHTML = AppState.roomSpectators.map(s =>
+                    `<div class="spec-item"><i class="fas fa-eye"></i> ${s.username}</div>`
+                ).join('');
+            }
+        }
+
+        const isSpectator = AppState.roomSpectators.find(s => s.username === AppState.user.username);
+        const canStart = AppState.roomPlayers.length >= 2;
+
+        if (els.btnFindMatchWaiting) {
+            if (isSpectator) {
+                els.btnFindMatchWaiting.disabled = true;
+                els.btnFindMatchWaiting.textContent = '👁 SPECTATING';
+                els.btnFindMatchWaiting.style.opacity = '0.6';
+            } else if (canStart) {
+                els.btnFindMatchWaiting.disabled = false;
+                els.btnFindMatchWaiting.textContent = `▶ START GAME (${AppState.roomPlayers.length} Pemain)`;
+                els.btnFindMatchWaiting.style.opacity = '1';
+            } else {
+                els.btnFindMatchWaiting.disabled = true;
+                els.btnFindMatchWaiting.textContent = '⏳ MENUNGGU PEMAIN... (Min. 2)';
+                els.btnFindMatchWaiting.style.opacity = '0.7';
+            }
+        }
     }
 };
 
-// ============================================================
-//  GAME — Display & Input only
-//  Semua scoring/logic ada di server
-// ============================================================
+const Network = {
+    connect: () => {
+        if (els.serverStatus) els.serverStatus.textContent = "ONLINE";
+        Network.refreshLeaderboard();
+    },
+    refreshLeaderboard: () => {
+        const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
+        const playerMap = {};
+        sessions.forEach(s => {
+            (s.players || []).forEach(p => {
+                if (!playerMap[p.username]) playerMap[p.username] = { username: p.username, score: 0 };
+                playerMap[p.username].score += (parseInt(p.score) || 0);
+            });
+        });
+        const lbData = Object.values(playerMap).sort((a, b) => b.score - a.score);
+        UI.renderLeaderboardMini(lbData);
+    }
+};
+
+// ─── OVERLAY READY ROOM (injected, tidak ubah HTML asli) ────────────────────
+function injectReadyOverlay() {
+    if (document.getElementById('ready-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'ready-overlay';
+    overlay.style.cssText = `
+        display:none; position:absolute; inset:0; z-index:30;
+        background:rgba(26,35,126,0.55); backdrop-filter:blur(6px);
+        flex-direction:column; align-items:center; justify-content:center;
+        gap:24px;
+    `;
+    overlay.innerHTML = `
+        <div style="font-size:1.3rem;font-weight:900;color:#fff;letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,.4);">
+            MATCH DITEMUKAN!
+        </div>
+        <div style="display:flex;gap:20px;justify-content:center;align-items:center;flex-wrap:wrap;">
+            <div id="ro-card-me" style="background:rgba(255,255,255,.12);border:3px solid #fff;border-radius:16px;padding:20px 28px;text-align:center;min-width:130px;">
+                <div id="ro-avatar-me" style="font-size:2rem;margin-bottom:8px;">👤</div>
+                <div id="ro-name-me" style="font-size:13px;font-weight:800;color:#fff;">Kamu</div>
+                <div id="ro-dot-me" style="width:18px;height:18px;border-radius:50%;background:#ccc;margin:10px auto 4px;transition:.3s;"></div>
+                <div id="ro-text-me" style="font-size:11px;color:rgba(255,255,255,.7);font-weight:700;">NOT READY</div>
+            </div>
+            <div style="font-size:2rem;font-weight:900;color:#FFD700;text-shadow:0 0 20px rgba(255,215,0,.5);">VS</div>
+            <div id="ro-card-opp" style="background:rgba(255,255,255,.12);border:3px solid #fff;border-radius:16px;padding:20px 28px;text-align:center;min-width:130px;">
+                <div id="ro-avatar-opp" style="font-size:2rem;margin-bottom:8px;">🤖</div>
+                <div id="ro-name-opp" style="font-size:13px;font-weight:800;color:#fff;">Lawan</div>
+                <div id="ro-dot-opp" style="width:18px;height:18px;border-radius:50%;background:#ccc;margin:10px auto 4px;transition:.3s;"></div>
+                <div id="ro-text-opp" style="font-size:11px;color:rgba(255,255,255,.7);font-weight:700;">WAITING...</div>
+            </div>
+        </div>
+        <button id="ro-ready-btn" onclick="Game.confirmReady()" style="
+            padding:16px 48px; background:linear-gradient(135deg,#FFA000,#FF6D00);
+            color:#000; font-size:1.1rem; font-weight:900; border:none;
+            border-radius:14px; cursor:pointer; letter-spacing:2px;
+            box-shadow:0 6px 25px rgba(255,160,0,.4);
+            animation: pulseBtnRO 1.5s infinite;
+        ">⚡ SAYA SIAP!</button>
+        <style>
+            @keyframes pulseBtnRO { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+        </style>
+    `;
+    document.getElementById('game-screen').appendChild(overlay);
+}
+
+// ─── ROUND INTRO OVERLAY ─────────────────────────────────────────────────────
+function showRoundIntro(roundNum, callback) {
+    let overlay = document.getElementById('round-intro-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'round-intro-overlay';
+        overlay.style.cssText = `
+            display:none; position:absolute; inset:0; z-index:25;
+            background:rgba(26,35,126,0.7); backdrop-filter:blur(4px);
+            flex-direction:column; align-items:center; justify-content:center;
+            pointer-events:none;
+        `;
+        document.getElementById('game-screen').appendChild(overlay);
+    }
+
+    const roundColors = ['#00BFA5', '#2196F3', '#FF6B35', '#7C4DFF', '#E53935'];
+    const color = roundColors[(roundNum - 1) % roundColors.length];
+
+    // Difficulty increases
+    const diffLabel = roundNum <= 1 ? '🟢 EASY' : roundNum <= 2 ? '🟡 MEDIUM' : roundNum <= 3 ? '🟠 HARD' : roundNum <= 4 ? '🔴 HARDER' : '💀 EXTREME';
+
+    overlay.innerHTML = `
+        <div style="text-align:center;">
+            <div style="font-size:clamp(3rem,10vw,6rem);font-weight:900;color:${color};
+                text-shadow:0 0 40px ${color}88;
+                animation:introZoom .4s cubic-bezier(.175,.885,.32,1.275);">
+                ROUND ${roundNum}
+            </div>
+            <div style="font-size:1.1rem;color:rgba(255,255,255,.8);margin-top:8px;font-weight:700;letter-spacing:2px;">
+                ${diffLabel}
+            </div>
+        </div>
+        <style>
+            @keyframes introZoom { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+        </style>
+    `;
+    overlay.style.display = 'flex';
+
+    setTimeout(() => {
+        overlay.style.transition = 'opacity .3s';
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            overlay.style.opacity = '1';
+            overlay.style.transition = '';
+            if (callback) callback();
+        }, 300);
+    }, 1200);
+}
+
+// ─── COUNTDOWN BEFORE SPAWN ──────────────────────────────────────────────────
+function showCountdown(from, callback) {
+    let overlay = document.getElementById('countdown-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'countdown-overlay';
+        overlay.style.cssText = `
+            display:none; position:absolute; inset:0; z-index:24;
+            flex-direction:column; align-items:center; justify-content:center;
+            pointer-events:none;
+        `;
+        document.getElementById('game-screen').appendChild(overlay);
+    }
+
+    let count = from;
+    function tick() {
+        if (count <= 0) {
+            overlay.style.display = 'none';
+            if (callback) callback();
+            return;
+        }
+        const color = count <= 1 ? '#E53935' : count === 2 ? '#FFA000' : '#43A047';
+        overlay.innerHTML = `
+            <div style="font-size:clamp(4rem,12vw,8rem);font-weight:900;color:${color};
+                text-shadow:0 0 30px ${color}88;
+                animation:countPop .5s cubic-bezier(.175,.885,.32,1.275);">
+                ${count}
+            </div>
+            <style>@keyframes countPop{from{transform:scale(2);opacity:0}to{transform:scale(1);opacity:1}}</style>
+        `;
+        overlay.style.display = 'flex';
+        count--;
+        setTimeout(tick, 700);
+    }
+    tick();
+}
+
 const Game = {
+    enterRoom: () => {
+        showScreen('roomWaiting');
 
-    // ── Matchmaking ──────────────────────────────────────────
-    startMatch: () => {
-        showScreen('game');
-        AppState.isGameActive   = false;
-        AppState.myScore        = 0;
-        AppState.opponentScore  = 0;
-        AppState.myCombo        = 0;
-        AppState.activeItemEls  = {};
+        // Player masuk sebagai player jika slot < maxPlayers
+        AppState.roomPlayers = [];
+        AppState.roomSpectators = [];
 
-        if(els.gameArea)  els.gameArea.className = 'state-wait';
-        if(els.readyRoom) els.readyRoom.classList.remove('active');
-        if(els.roundInd)  els.roundInd.textContent = "MATCHMAKING";
-        if(els.modeInd)   els.modeInd.textContent  = AppState.isGuest ? "GUEST MATCH" : "RANKED MATCH";
-        if(els.msgMain)   els.msgMain.textContent  = "SEARCHING";
-        if(els.msgSub)    els.msgSub.textContent   = "Finding an opponent...";
+        if (AppState.roomPlayers.length < AppState.maxPlayers) {
+            AppState.roomPlayers.push(AppState.user);
+        } else {
+            // Slot penuh → jadi spectator
+            AppState.roomSpectators.push(AppState.user);
+        }
 
-        // Kirim ke server — server yang cari lawan
-        Network.send({ type: 'FIND_MATCH', username: AppState.user?.username });
+        // Auto-add 1 bot agar bisa langsung test (bisa diremove jika ada multiplayer nyata)
+        const dummyBot = { username: 'Bot_Alpha', icon: 'fa-robot', isBot: true };
+        if (AppState.roomPlayers.length < AppState.maxPlayers) {
+            AppState.roomPlayers.push(dummyBot);
+        }
+
+        UI.renderRoomSlots();
     },
 
-    showReadyRoom: (opponentName, opponentIcon = 'fa-robot') => {
-        if(els.opponentName)   els.opponentName.textContent   = opponentName;
-        if(els.readyRoom)      els.readyRoom.classList.add('active');
-        if(els.readyStatusMe)  els.readyStatusMe.className   = 'status-dot';
-        if(els.readyTextMe)    els.readyTextMe.textContent   = "NOT READY";
-        if(els.readyStatusOpp) els.readyStatusOpp.className  = 'status-dot';
-        if(els.readyTextOpp)   els.readyTextOpp.textContent  = "WAITING...";
-        if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = false; els.btnReadyConfirm.textContent = "I AM READY"; }
+    leaveRoom: () => {
+        AppState.roomPlayers = [];
+        AppState.roomSpectators = [];
+        showScreen('lobby');
+    },
+
+    startMatch: () => {
+        if (AppState.roomPlayers.length < 2) {
+            alert("Minimal 2 pemain dibutuhkan untuk mulai!");
+            return;
+        }
+
+        AppState.isVsAI = false;
+        AppState.matchFound = false;
+        AppState.isUserReady = false;
+        AppState.isOpponentReady = false;
+
+        showScreen('game');
+        injectReadyOverlay();
+
+        AppState.isGameActive = false;
+        AppState.currentRound = 1;
+        AppState.reactionTimes = [];
+        AppState.currentScore = 0;
+        AppState.combo = 0;
+
+        if (els.gameArea) els.gameArea.className = 'state-wait';
+        if (els.roundInd) els.roundInd.textContent = "MATCHMAKING";
+        if (els.msgMain) els.msgMain.textContent = "";
+        if (els.msgSub) els.msgSub.textContent = "";
+
+        setTimeout(() => { Game.showReadyRoom(); }, 600);
+    },
+
+    startVsAI: (difficulty) => {
+        AppState.isVsAI = true;
+        AppState.aiDifficulty = difficulty;
+        AppState.matchFound = true;
+        AppState.isUserReady = false;
+        AppState.isOpponentReady = true;
+
+        showScreen('game');
+        injectReadyOverlay();
+
+        AppState.isGameActive = false;
+        AppState.currentRound = 1;
+        AppState.reactionTimes = [];
+        AppState.currentScore = 0;
+        AppState.combo = 0;
+
+        if (els.gameArea) els.gameArea.className = 'state-wait';
+        if (els.roundInd) els.roundInd.textContent = "VS AI";
+        if (els.msgMain) els.msgMain.textContent = "";
+        if (els.msgSub) els.msgSub.textContent = "";
+
+        setTimeout(() => { Game.showReadyRoomAI(); }, 500);
+    },
+
+    showReadyRoom: () => {
+        AppState.matchFound = true;
+        const overlay = document.getElementById('ready-overlay');
+        if (!overlay) return;
+
+        const opponents = AppState.roomPlayers.filter(p => p.username !== AppState.user.username);
+        let oppName = opponents.map(o => o.username).join(', ');
+        if (oppName.length > 18) oppName = oppName.substring(0, 18) + '...';
+
+        const meEl = document.getElementById('ro-name-me');
+        const oppEl = document.getElementById('ro-name-opp');
+        const dotMe = document.getElementById('ro-dot-me');
+        const txtMe = document.getElementById('ro-text-me');
+        const dotOpp = document.getElementById('ro-dot-opp');
+        const txtOpp = document.getElementById('ro-text-opp');
+        const avatarMe = document.getElementById('ro-avatar-me');
+        const avatarOpp = document.getElementById('ro-avatar-opp');
+        const btn = document.getElementById('ro-ready-btn');
+
+        if (meEl) meEl.textContent = AppState.user.username;
+        if (oppEl) oppEl.textContent = oppName || 'Lawan';
+        if (avatarMe) avatarMe.innerHTML = `<i class="fas ${AppState.user.icon || 'fa-user'}" style="color:#00BFA5"></i>`;
+        if (avatarOpp) avatarOpp.innerHTML = `<i class="fas fa-robot" style="color:#FF6B35"></i>`;
+        if (dotMe) dotMe.style.background = '#ccc';
+        if (txtMe) txtMe.textContent = 'NOT READY';
+        if (dotOpp) dotOpp.style.background = '#FFA000';
+        if (txtOpp) txtOpp.textContent = 'WAITING...';
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ SAYA SIAP!'; btn.style.opacity = '1'; }
+
+        overlay.style.display = 'flex';
+    },
+
+    showReadyRoomAI: () => {
+        const overlay = document.getElementById('ready-overlay');
+        if (!overlay) return;
+
+        const aiName = AppState.aiDifficulty === 'hard' ? 'AI Bot ⚡ [HARD]' : 'AI Bot 🐢 [EASY]';
+
+        const meEl = document.getElementById('ro-name-me');
+        const oppEl = document.getElementById('ro-name-opp');
+        const dotMe = document.getElementById('ro-dot-me');
+        const txtMe = document.getElementById('ro-text-me');
+        const dotOpp = document.getElementById('ro-dot-opp');
+        const txtOpp = document.getElementById('ro-text-opp');
+        const avatarMe = document.getElementById('ro-avatar-me');
+        const avatarOpp = document.getElementById('ro-avatar-opp');
+        const btn = document.getElementById('ro-ready-btn');
+
+        if (meEl) meEl.textContent = AppState.user ? AppState.user.username : 'Kamu';
+        if (oppEl) oppEl.textContent = aiName;
+        if (avatarMe) avatarMe.innerHTML = `<i class="fas ${AppState.user ? AppState.user.icon : 'fa-user'}" style="color:#00BFA5"></i>`;
+        if (avatarOpp) avatarOpp.innerHTML = AppState.aiDifficulty === 'hard' ? '⚡' : '🐢';
+        if (dotMe) dotMe.style.background = '#ccc';
+        if (txtMe) txtMe.textContent = 'NOT READY';
+        if (dotOpp) { dotOpp.style.background = '#43A047'; dotOpp.style.boxShadow = '0 0 10px #43A047'; }
+        if (txtOpp) txtOpp.textContent = 'READY ✓';
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ SAYA SIAP!'; btn.style.opacity = '1'; }
+
+        overlay.style.display = 'flex';
     },
 
     confirmReady: () => {
-        if(els.readyStatusMe)  els.readyStatusMe.className  = 'status-dot waiting';
-        if(els.readyTextMe)    els.readyTextMe.textContent  = "WAITING OPPONENT...";
-        if(els.btnReadyConfirm){ els.btnReadyConfirm.disabled = true; els.btnReadyConfirm.textContent = "READY"; }
-        // Kirim ke server
-        Network.send({ type: 'PLAYER_READY', username: AppState.user?.username });
+        if (AppState.isUserReady) return;
+        AppState.isUserReady = true;
+
+        const dotMe = document.getElementById('ro-dot-me');
+        const txtMe = document.getElementById('ro-text-me');
+        const btn = document.getElementById('ro-ready-btn');
+
+        if (dotMe) { dotMe.style.background = '#43A047'; dotMe.style.boxShadow = '0 0 10px #43A047'; }
+        if (txtMe) txtMe.textContent = 'READY ✓';
+        if (btn) { btn.disabled = true; btn.textContent = 'Menunggu...'; btn.style.opacity = '0.6'; }
+
+        if (AppState.isVsAI) {
+            setTimeout(() => { Game._hideReadyAndStart(); }, 600);
+        } else {
+            // Simulasi lawan siap
+            setTimeout(() => {
+                const dotOpp = document.getElementById('ro-dot-opp');
+                const txtOpp = document.getElementById('ro-text-opp');
+                if (dotOpp) { dotOpp.style.background = '#43A047'; dotOpp.style.boxShadow = '0 0 10px #43A047'; }
+                if (txtOpp) txtOpp.textContent = 'READY ✓';
+                setTimeout(() => { Game._hideReadyAndStart(); }, 700);
+            }, Math.random() * 1000 + 400);
+        }
     },
 
-    onStartGame: () => {
-        if(els.readyRoom) els.readyRoom.classList.remove('active');
+    _hideReadyAndStart: () => {
+        const overlay = document.getElementById('ready-overlay');
+        if (overlay) overlay.style.display = 'none';
         AppState.isGameActive = true;
-        if(els.gameArea)  els.gameArea.className  = 'state-wait';
-        if(els.msgMain)   els.msgMain.textContent = "ROUND 1";
-        if(els.msgSub)    els.msgSub.textContent  = "Get Ready...";
+        Game.nextRound();
     },
 
-    // ── RENDER ITEMS dari server ──────────────────────────────
-    // Tidak ada random di sini! Semua data dari server
-    renderItems: (items, round) => {
-        if (!els.trashContainer) return;
-        AppState.isGameActive = true;
-        AppState.roundStartTime = performance.now();
-        els.gameArea.className = 'state-go';
-        if(els.msgMain) els.msgMain.textContent = '';
-        if(els.msgSub)  els.msgSub.textContent  = '';
-        els.trashContainer.innerHTML = '';
-        AppState.activeItemEls = {};
+    nextRound: () => {
+        if (AppState.currentRound > AppState.maxRounds) { Game.endGame(); return; }
+        if (els.comboDisplay) els.comboDisplay.classList.remove('show');
+        Game.setStateWait('', '');
+        if (els.roundInd) els.roundInd.textContent = `ROUND ${AppState.currentRound} / ${AppState.maxRounds}`;
 
-        items.forEach(item => {
-            Game.createItemEl(item, round);
+        // Show round intro then countdown then spawn
+        showRoundIntro(AppState.currentRound, () => {
+            showCountdown(3, () => {
+                Game.spawnTrash();
+            });
         });
     },
 
-    createItemEl: (item, round) => {
-        // item = { id, type, top, left, duration }
+    setStateWait: (mainTxt, subTxt) => {
+        AppState.isGameActive = false;
+        if (els.gameArea) els.gameArea.className = 'state-wait';
+        if (els.msgMain) { els.msgMain.textContent = mainTxt; els.msgMain.style.color = ''; }
+        if (els.msgSub) { els.msgSub.textContent = subTxt; els.msgSub.style.color = ''; }
+        if (els.trashContainer) els.trashContainer.innerHTML = '';
+        AppState.gameIntervals.forEach(clearInterval);
+        AppState.gameIntervals = [];
+        if (AppState.roundTimer) clearInterval(AppState.roundTimer);
+        if (els.gameTimer) { els.gameTimer.textContent = "--"; els.gameTimer.classList.remove('warning'); }
+    },
+
+    startRoundTimer: (duration) => {
+        let timeLeft = Math.ceil(duration / 1000);
+        if (els.gameTimer) {
+            els.gameTimer.textContent = timeLeft;
+            els.gameTimer.classList.remove('warning');
+        }
+        AppState.roundTimer = setInterval(() => {
+            timeLeft--;
+            if (els.gameTimer) {
+                els.gameTimer.textContent = timeLeft;
+                if (timeLeft <= 3) els.gameTimer.classList.add('warning');
+            }
+            if (timeLeft <= 0) clearInterval(AppState.roundTimer);
+        }, 1000);
+    },
+
+    spawnTrash: () => {
+        AppState.isGameActive = true;
+        if (els.gameArea) els.gameArea.className = 'state-go';
+        if (els.msgMain) { els.msgMain.textContent = ''; }
+        if (els.msgSub) { els.msgSub.textContent = ''; }
+        if (els.trashContainer) els.trashContainer.innerHTML = '';
+        AppState.gameStartTimestamp = performance.now();
+
+        const round = AppState.currentRound;
+
+        // Items: lebih banyak tiap ronde
+        let itemCount = 4 + (round * 2);
+        if (itemCount > 16) itemCount = 16;
+
+        // Timer: makin cepat tiap ronde
+        let duration = 5500 - (round * 500);
+        if (duration < 2000) duration = 2000;
+
+        Game.startRoundTimer(duration);
+
+        // Bomb chance: makin banyak tiap ronde
+        let bombChance = 0.10 + (round * 0.04);
+        if (bombChance > 0.35) bombChance = 0.35;
+
+        for (let i = 0; i < itemCount; i++) {
+            const typeRand = Math.random();
+            let type = 'good';
+            let itemDuration = duration + (Math.random() * 200 - 100);
+            if (typeRand < bombChance) { type = 'bad'; itemDuration += 300; }
+            else if (typeRand > 0.85) { type = 'bonus'; itemDuration = 1800 - (round * 100); if (itemDuration < 900) itemDuration = 900; }
+
+            const top = Math.random() * 50 + 15;
+            const left = Math.random() * 60 + 10;
+            Game.createItem(type, top, left, itemDuration, round);
+        }
+
+        // End-of-round auto-timeout
+        const endTimer = setTimeout(() => {
+            if (AppState.isGameActive) {
+                AppState.currentRound++;
+                Game.nextRound();
+            }
+        }, duration + 500);
+        AppState.gameIntervals.push(endTimer);
+
+        if (AppState.isVsAI || AppState.roomPlayers.some(p => p.isBot)) {
+            Game.runAI();
+        }
+    },
+
+    runAI: () => {
+        const round = AppState.currentRound;
+        const baseMsEasy = 700 - (round * 30);
+        const baseMsHard = 300 - (round * 20);
+        const baseTime = AppState.aiDifficulty === 'hard' ? Math.max(baseMsHard, 120) : Math.max(baseMsEasy, 350);
+        const variance = AppState.aiDifficulty === 'hard' ? 80 : 180;
+
+        setTimeout(() => {
+            const items = document.querySelectorAll('.trash-item.good, .trash-item.bonus');
+            items.forEach((item, index) => {
+                const delay = Math.random() * variance + (index * 80);
+                setTimeout(() => {
+                    if (AppState.isGameActive && item.parentNode) {
+                        if (item.parentNode) item.parentNode.removeChild(item);
+                        Game.checkEndRound();
+                    }
+                }, delay);
+            });
+        }, baseTime);
+    },
+
+    createItem: (type, top, left, duration, speed) => {
         const el = document.createElement('div');
-        el.className = `trash-item ${item.type}`;
-        el.style.top  = item.top  + '%';
-        el.style.left = item.left + '%';
+        el.className = `trash-item ${type}`;
+        el.style.top = top + '%';
+        el.style.left = left + '%';
 
         let iconClass = 'fa-recycle icon-good';
-        let color     = 'var(--accent-green)';
-        if (item.type === 'bad')   { iconClass = 'fa-bomb icon-bad';  color = 'var(--accent-red)'; }
-        if (item.type === 'bonus') { iconClass = 'fa-gem icon-bonus'; color = 'var(--accent-yellow)'; }
+        if (type === 'bad') iconClass = 'fa-bomb icon-bad';
+        if (type === 'bonus') iconClass = 'fa-gem icon-bonus';
+        el.innerHTML = `<i class="fas ${iconClass}"></i>`;
 
-        el.innerHTML = `<i class="fas ${iconClass}"></i><div class="trash-timer"><div class="timer-fill" style="color:${color}"></div></div>`;
+        // Store intervals on element itself to allow cleanup on click (fix memory leak)
+        el._intervals = [];
 
-        // Animasi gerak (visual only, tidak mempengaruhi logic)
-        if (round >= 3) {
-            const sf = (round - 2) * 0.5;
-            el.style.setProperty('--dx', `${(Math.random()-0.5)*80*sf}px`);
-            el.style.setProperty('--dy', `${(Math.random()-0.5)*40*sf}px`);
-            el.classList.add('moving');
+        el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); Game.processClick(el, type); };
+
+        // Movement speed per ronde:
+        // Ronde 1-2 = diam
+        // Ronde 3   = pelan (0.6)
+        // Ronde 4   = sedang (1.3)
+        // Ronde 5   = kencang (2.2)
+        const round = AppState.currentRound;
+        const speedMap = { 1: 0, 2: 0, 3: 0.6, 4: 1.3, 5: 2.2 };
+        const moveSpeed = speedMap[round] !== undefined ? speedMap[round] : 2.2;
+
+        let x = parseFloat(left);
+        let y = parseFloat(top);
+        let dx = 0, dy = 0;
+
+        if (moveSpeed > 0) {
+            const angle = Math.random() * Math.PI * 2;
+            dx = Math.cos(angle) * moveSpeed;
+            dy = Math.sin(angle) * moveSpeed;
         }
 
-        // ── CLICK HANDLER: kirim itemId ke server, jangan hitung skor ──
-        el.onpointerdown = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!AppState.isGameActive) return;
-
-            // 1. Hapus item dari layar SEGERA (client-side prediction visual)
-            Game.removeItemEl(item.id);
-
-            // 2. Kirim aksi ke server — server yang validasi & hitung skor
-            Network.send({
-                type:      'ITEM_CLICKED',
-                itemId:    item.id,
-                username:  AppState.user?.username,
-                clickTime: Date.now() // timestamp untuk perhitungan latency di server
-            });
-
-            // 3. Feedback visual instan (BUKAN skor — hanya animasi)
-            const localReact = performance.now() - AppState.roundStartTime;
-            if (item.type === 'bad') {
-                Game.showFeedback("BOMB!", "var(--accent-red)", false);
-            } else if (item.type === 'bonus') {
-                Game.showFeedback("BONUS!", "var(--accent-yellow)", true);
-            } else {
-                Game.showFeedback(`${Math.floor(localReact)}<span class='unit-ms'>ms</span>`, "var(--accent-green)", true);
-            }
-        };
-
-        // Timer visual (hanya animasi bar — tidak berhubungan dengan expiry server)
-        // FIX#7: store interval ref on element so removeItemEl can clear it
-        const timerFill = el.querySelector('.timer-fill');
-        const startTime = performance.now();
-        const interval = setInterval(() => {
-            const pct = 100 - ((performance.now() - startTime) / item.duration * 100);
-            if (timerFill) timerFill.style.transform = `scaleX(${Math.max(0, pct/100)})`;
-            if (pct <= 0) clearInterval(interval);
+        const moveInt = setInterval(() => {
+            if (!document.body.contains(el)) { clearInterval(moveInt); return; }
+            if (moveSpeed === 0) return;
+            x += dx;
+            y += dy;
+            if (x < 5 || x > 82) dx *= -1;
+            if (y < 8 || y > 78) dy *= -1;
+            el.style.left = x + '%';
+            el.style.top = y + '%';
         }, 16);
-        el._timerInterval = interval; // FIX#7: store ref
+        AppState.gameIntervals.push(moveInt);
+        el._intervals.push(moveInt);
 
-        AppState.activeItemEls[item.id] = el;
-        els.trashContainer.appendChild(el);
+        // Despawn after duration
+        const startTime = performance.now();
+        const despawnInt = setInterval(() => {
+            if (!AppState.isGameActive) { clearInterval(despawnInt); clearInterval(moveInt); return; }
+            const elapsed = performance.now() - startTime;
+            if (elapsed > duration) {
+                clearInterval(despawnInt);
+                clearInterval(moveInt);
+                if (el.parentNode) el.parentNode.removeChild(el);
+                if (type === 'good') {
+                    AppState.combo = 0;
+                    Game.updateStats();
+                }
+                Game.checkEndRound();
+            }
+        }, 100);
+        AppState.gameIntervals.push(despawnInt);
+        el._intervals.push(despawnInt);
+
+        if (els.trashContainer) els.trashContainer.appendChild(el);
     },
 
-    removeItemEl: (itemId) => {
-        const el = AppState.activeItemEls[itemId];
-        if (el) {
-            // FIX#7: clear timer interval to prevent memory/CPU leak
-            if (el._timerInterval) clearInterval(el._timerInterval);
-            if (el.parentNode) el.parentNode.removeChild(el);
-        }
-        delete AppState.activeItemEls[itemId];
-    },
+    processClick: (el, type) => {
+        if (!AppState.isGameActive) return;
+        const reactionTime = performance.now() - AppState.gameStartTimestamp;
+        AppState.reactionTimes.push(reactionTime);
+        // Clear this item's intervals immediately (fix memory leak)
+        if (el._intervals) el._intervals.forEach(clearInterval);
+        if (el.parentNode) el.parentNode.removeChild(el);
 
-    // ── Terima skor resmi dari server ────────────────────────
-    onScoreUpdate: (msg) => {
-        // msg = { myScore, opponentScore, myCombo, myAvgReaction, myBestReaction }
-        AppState.myScore       = msg.myScore       ?? AppState.myScore;
-        AppState.opponentScore = msg.opponentScore ?? AppState.opponentScore;
-        AppState.myCombo       = msg.myCombo       ?? AppState.myCombo;
-        if (msg.myAvgReaction)  AppState.myAvgReaction  = msg.myAvgReaction;
-        if (msg.myBestReaction) AppState.myBestReaction = msg.myBestReaction;
-
-        // Update UI
-        if(els.statScore) els.statScore.textContent = AppState.myScore;
-        if(els.statAvg)   els.statAvg.textContent   = AppState.myAvgReaction;
-        if(els.statBest)  els.statBest.textContent  = AppState.myBestReaction;
-        if(els.comboVal)  els.comboVal.textContent  = AppState.myCombo;
-        if (AppState.myCombo > 1) {
-            if(els.comboDisplay) els.comboDisplay.classList.add('show');
+        if (type === 'bad') {
+            Game.showFeedback("BOMB! -50", "#ff4444", false);
+            AppState.currentScore -= 50;
+            AppState.combo = 0;
+        } else if (type === 'bonus') {
+            Game.showFeedback("+250 BONUS!", "#ffd700", true);
+            AppState.currentScore += 250;
+            AppState.combo++;
         } else {
-            if(els.comboDisplay) els.comboDisplay.classList.remove('show');
+            const comboBonus = Math.min(AppState.combo, 10) * 10;
+            const score = 100 + comboBonus;
+            Game.showFeedback(`${Math.floor(reactionTime)}ms +${score}`, "#00ff88", true);
+            AppState.currentScore += score;
+            AppState.combo++;
         }
+        Game.updateStats();
+        Game.checkEndRound();
     },
 
-    onRoundResult: (msg) => {
-        // Tampilkan siapa yang menang ronde ini
-        if(els.msgMain) {
-            els.msgMain.textContent = msg.roundWinner === AppState.user?.username ? "ROUND WIN!" : "ROUND LOST";
-            els.msgMain.style.color = msg.roundWinner === AppState.user?.username ? "var(--accent-green)" : "var(--accent-red)";
-        }
-    },
-
-    onGameOver: (stats) => {
-        AppState.isGameActive = false;
-        if(els.gameArea) els.gameArea.className = 'state-wait';
-        if(els.msgMain)  els.msgMain.textContent = "FINISH";
-        if(els.trashContainer) els.trashContainer.innerHTML = '';
-        AppState.activeItemEls = {};
-        UI.showResultModal(stats);
+    checkEndRound: () => {
+        setTimeout(() => {
+            if (!AppState.isGameActive) return;
+            const remaining = document.querySelectorAll('.trash-item.good, .trash-item.bonus').length;
+            if (remaining === 0) {
+                AppState.currentRound++;
+                Game.nextRound();
+            }
+        }, 60);
     },
 
     showFeedback: (text, color, isPositive) => {
-        if(els.msgSub) { els.msgSub.innerHTML = text; els.msgSub.style.color = color; }
-        if(els.msgMain) { els.msgMain.textContent = isPositive ? "HIT!" : "OUCH!"; els.msgMain.style.color = color; }
+        if (els.msgSub) { els.msgSub.textContent = text; els.msgSub.style.color = color; }
+        if (els.msgMain) { els.msgMain.textContent = isPositive ? "HIT!" : "MISS!"; els.msgMain.style.color = color; }
+        if (isPositive && els.comboVal && els.comboDisplay) {
+            els.comboVal.textContent = AppState.combo;
+            if (AppState.combo >= 2) els.comboDisplay.classList.add('show');
+        } else if (els.comboDisplay) {
+            els.comboDisplay.classList.remove('show');
+        }
+    },
+
+    updateStats: () => {
+        const avg = AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a, b) => a + b, 0) / AppState.reactionTimes.length).toFixed(0) : '---';
+        const best = AppState.reactionTimes.length ? Math.min(...AppState.reactionTimes).toFixed(0) : '---';
+        if (els.statAvg) els.statAvg.textContent = avg;
+        if (els.statBest) els.statBest.textContent = best;
+        if (els.statScore) els.statScore.textContent = AppState.currentScore;
+    },
+
+    endGame: (isDisconnect = false) => {
+        AppState.isGameActive = false;
+        if (els.gameArea) els.gameArea.className = 'state-wait';
+        if (AppState.roundTimer) clearInterval(AppState.roundTimer);
+        AppState.gameIntervals.forEach(clearInterval);
+        AppState.gameIntervals = [];
+
+        // Hide overlays
+        const ro = document.getElementById('ready-overlay');
+        if (ro) ro.style.display = 'none';
+        const ri = document.getElementById('round-intro-overlay');
+        if (ri) ri.style.display = 'none';
+        const co = document.getElementById('countdown-overlay');
+        if (co) co.style.display = 'none';
+
+        if (els.msgMain) els.msgMain.textContent = isDisconnect ? "FORFEIT" : "FINISH!";
+        if (els.msgSub) { els.msgSub.textContent = ''; els.msgSub.style.color = ''; }
+
+        try {
+            if (AppState.isGuest) {
+                if (els.resXP) { els.resXP.textContent = "+0 XP"; els.resXP.style.color = "#888"; }
+            } else if (!AppState.isGuest) {
+                const oldLevel = getLevelData(AppState.user.totalXP || 0).level;
+                AppState.user.gamesPlayed = (AppState.user.gamesPlayed || 0) + 1;
+                if (AppState.reactionTimes.length > 0) {
+                    const avg = AppState.reactionTimes.reduce((a, b) => a + b, 0) / AppState.reactionTimes.length;
+                    if (!AppState.user.bestTime || avg < AppState.user.bestTime) AppState.user.bestTime = avg;
+                }
+                let isWin = AppState.isVsAI ? true : (AppState.currentScore > 300 && !isDisconnect);
+                let xpEarned = isWin ? XP_REWARDS.WIN : XP_REWARDS.LOSE;
+                AppState.user.totalXP = (AppState.user.totalXP || 0) + xpEarned;
+                const newLevelData = getLevelData(AppState.user.totalXP);
+                AppState.user.level = newLevelData.level;
+                if (els.resXP) { els.resXP.textContent = `+${xpEarned} XP`; els.resXP.style.color = isWin ? "#43A047" : "#888"; }
+                if (newLevelData.level > oldLevel && els.msgSub) {
+                    els.msgSub.innerHTML = `🎉 LEVEL UP! → Lv.${newLevelData.level}`;
+                    els.msgSub.style.color = "#FFA000";
+                }
+                UI.updateProfileUI();
+                saveCurrentUser(AppState.user);
+                updateUserInDB(AppState.user);
+                Storage.saveSession([{
+                    username: AppState.user.username,
+                    score: AppState.currentScore,
+                    avgTime: AppState.reactionTimes.length ? (AppState.reactionTimes.reduce((a, b) => a + b, 0) / AppState.reactionTimes.length).toFixed(0) : '---',
+                    bestTime: AppState.reactionTimes.length ? Math.min(...AppState.reactionTimes).toFixed(0) : '---',
+                    xp: xpEarned
+                }], AppState.isVsAI ? 'VS AI' : 'Ranked');
+            }
+            UI.showResultModal();
+        } catch (e) {
+            console.error("endGame error:", e);
+            UI.showResultModal();
+        }
+    },
+
+    exitGame: () => {
+        if (AppState.isGameActive) {
+            if (confirm("Yakin ingin keluar? Progress round ini akan hilang!")) {
+                Game.endGame(true);
+            }
+        } else {
+            Game.backToLobby();
+        }
     },
 
     backToLobby: () => {
-        if(els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
+        if (els.resModal) { els.resModal.classList.remove('show'); els.resModal.style.display = 'none'; }
+        AppState.isGameActive = false;
+        AppState.gameIntervals.forEach(clearInterval);
+        AppState.gameIntervals = [];
         showScreen('lobby');
         UI.updateProfileUI();
-        UI.initIconPicker();
-        // Request leaderboard refresh
-        Network.send({ type: 'get_leaderboard' });
-    },
-
-    // FIX#5: VS AI mode — simulate game locally against bot
-    startVsAI: (difficulty = 'easy') => {
-        showScreen('game');
-        AppState.isGameActive = false;
-        AppState.myScore = 0;
-        AppState.activeItemEls = {};
-
-        if(els.gameArea)  els.gameArea.className = 'state-wait';
-        if(els.readyRoom) els.readyRoom.classList.remove('active');
-        if(els.roundInd)  els.roundInd.textContent = 'ROUND 1 / 5';
-        if(els.modeInd)   els.modeInd.textContent  = difficulty === 'easy' ? 'VS AI (EASY)' : 'VS AI (HARD)';
-        if(els.msgMain)   els.msgMain.textContent  = 'VS AI';
-        if(els.msgSub)    els.msgSub.textContent   = difficulty === 'easy' ? 'Easy Mode — Reaksi AI ~600ms' : 'Hard Mode — Reaksi AI ~250ms';
-
-        // Tell server we're in solo/AI mode — server still spawns items
-        Network.send({ type: 'FIND_MATCH', username: AppState.user?.username, mode: 'ai', difficulty });
+        UI.loadLobbyStats();
+        UI.updateRoomUI();
+        Network.refreshLeaderboard();
     }
 };
 
-// ============================================================
-//  CHAT
-// ============================================================
+const Storage = {
+    saveSession: (players, mode) => {
+        const key = 'reactionDuel_sessions';
+        const sessions = JSON.parse(localStorage.getItem(key) || '[]');
+        sessions.unshift({
+            timestamp: new Date().toISOString(),
+            players: players,
+            mode: mode
+        });
+        if (sessions.length > 50) sessions.pop();
+        localStorage.setItem(key, JSON.stringify(sessions));
+    }
+};
+
 const Chat = {
-    handleKey: (e) => {
-        if (e.key !== 'Enter' || !els.chatInput) return;
+    handleKey: (e) => { if (e.key === 'Enter') Chat.send(); },
+    send: () => {
+        if (!els.chatInput) return;
         const msg = els.chatInput.value.trim();
         if (!msg) return;
-        // Kirim ke server — server yang broadcast ke semua
-        Network.send({ type: 'CHAT', username: AppState.user?.username, message: msg });
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        div.innerHTML = `<span class="chat-msg-meta" style="color:#00BFA5;">${AppState.user ? AppState.user.username : 'Guest'}:</span>${msg}`;
+        if (els.chatBox) { els.chatBox.appendChild(div); els.chatBox.scrollTop = els.chatBox.scrollHeight; }
         els.chatInput.value = '';
     }
 };
 
-// ============================================================
-//  INIT
-// ============================================================
+const Dashboard = {
+    init: () => {
+        const sessions = JSON.parse(localStorage.getItem('reactionDuel_sessions') || '[]');
+        if (els.sumSessions) els.sumSessions.textContent = sessions.length;
+        const allTimes = sessions.flatMap(s => s.players.map(p => parseFloat(p.avgTime))).filter(Boolean);
+        if (allTimes.length > 0) {
+            if (els.sumAvg) els.sumAvg.innerHTML = (allTimes.reduce((a, b) => a + b, 0) / allTimes.length).toFixed(0) + "<span class='unit'>ms</span>";
+            if (els.sumBest) els.sumBest.innerHTML = Math.min(...allTimes).toFixed(0) + "<span class='unit'>ms</span>";
+        }
+        if (els.histList) {
+            if (sessions.length === 0) {
+                els.histList.innerHTML = '<div class="empty-state">Belum ada riwayat permainan</div>';
+            } else {
+                els.histList.innerHTML = sessions.slice(0, 10).map(s => {
+                    const winner = [...(s.players || [])].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+                    return `<div class="history-item">
+                        <div>
+                            <div class="session-time">${new Date(s.timestamp).toLocaleString('id-ID')}</div>
+                            <div class="session-xp">XP: <span style="color:var(--green)">${s.players[0].xp || 0}</span></div>
+                        </div>
+                        <div class="history-stats">
+                            <div>Skor: <span>${winner ? winner.score : 0}</span></div>
+                            <div class="winner-tag">${winner ? winner.username : '?'}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+        if (window.Chart && els.chartTrend) {
+            if (sessions.length === 0) {
+                if (els.chartTrend.parentElement) els.chartTrend.parentElement.innerHTML = '<div class="empty-state">Belum ada data</div>';
+            } else {
+                new Chart(els.chartTrend.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: sessions.slice(0, 10).reverse().map((_, i) => i + 1),
+                        datasets: [{
+                            label: 'Avg Time (ms)',
+                            data: sessions.slice(0, 10).reverse().map(s => s.players[0]?.avgTime || 0),
+                            borderColor: '#00BFA5',
+                            tension: 0.4,
+                            fill: true,
+                            backgroundColor: 'rgba(0,191,165,.1)'
+                        }]
+                    },
+                    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false } } }
+                });
+            }
+        }
+    }
+};
+
+
+// ── MOBILE RESPONSIVE CSS INJECTION ─────────────────────────────────────────
+(function injectMobileCSS() {
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Mobile: sembunyikan sidebar, full width panels */
+        @media (max-width: 768px) {
+            .lobby-sidebar { display: none !important; }
+            #lobby-screen { flex-direction: column !important; }
+            .lobby-main { padding: 8px 8px 80px 8px !important; }
+            .panels-grid {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            .panel-card { min-height: unset !important; }
+            .topbar { padding: 0 10px !important; height: 54px !important; }
+            .topbar-center { font-size: 13px !important; letter-spacing: 2px !important; }
+            .user-name { font-size: 12px !important; }
+            .level-text { font-size: 10px !important; }
+            .xp-bar-bg { width: 80px !important; }
+            .btn-topbar { font-size: 10px !important; padding: 6px 10px !important; }
+            .server-status-badge { display: none !important; }
+
+            /* Login mobile */
+            .login-box { padding: 28px 20px !important; margin: 0 12px !important; }
+
+            /* Room waiting mobile */
+            .room-waiting-container { padding: 10px !important; }
+            .slots-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+            .rw-actions { flex-direction: column !important; }
+            .btn-rw { padding: 12px !important; }
+
+            /* Game screen mobile */
+            #game-ui-top { padding: 8px 12px !important; }
+            .timer-display { font-size: 18px !important; }
+            .btn-exit { font-size: 10px !important; padding: 8px 12px !important; }
+            #round-indicator { font-size: 11px !important; }
+            .trash-item { width: 70px !important; height: 70px !important; }
+            .icon-good, .icon-bad, .icon-bonus { font-size: 2rem !important; }
+            #stats-panel { gap: 8px !important; width: 96% !important; }
+            .stat-box { padding: 8px 10px !important; min-width: 70px !important; }
+            .stat-val { font-size: 0.9rem !important; }
+
+            /* Result modal mobile */
+            .result-box { padding: 24px 16px !important; margin: 0 12px !important; }
+        }
+    `;
+    document.head.appendChild(style);
+})();
+
+window.onbeforeunload = function () {
+    if (AppState.isGameActive) return "Game sedang berlangsung. Yakin ingin keluar?";
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     initDOM();
-    if(els.btnLogin)    els.btnLogin.onclick    = Auth.login;
-    if(els.btnRegister) els.btnRegister.onclick = Auth.register;
-    if(els.btnGuest)    els.btnGuest.onclick    = Auth.loginGuest;
-    Auth.checkSession();
+    if (els.btnLogin) els.btnLogin.onclick = Auth.login;
+    if (els.btnRegister) els.btnRegister.onclick = Auth.register;
+    if (els.btnGuest) els.btnGuest.onclick = Auth.loginGuest;
+    if (document.getElementById('sum-sessions')) Dashboard.init();
+    else if (document.getElementById('login-screen')) Auth.checkSession();
 });
