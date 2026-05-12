@@ -12,11 +12,11 @@ function getDB(): ?PDO {
     if ($pdo !== null) return $pdo;
 
     // Railway env vars (prioritas) → fallback lokal
-    $host = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST')     ?: 'mainline.proxy.rlwy.net';
-    $port = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT')     ?: '46463';
-    $db   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE') ?: 'railway';
-    $user = getenv('MYSQLUSER')     ?: getenv('MYSQL_USER')     ?: 'root';
-    $pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
+    $host = getenv('MYSQLHOST')     ?: getenv('mainline.proxy.rlwy.net')     ?: 'mainline.proxy.rlwy.net';
+    $port = getenv('MYSQLPORT')     ?: getenv('46463')     ?: '3306';
+    $db   = getenv('MYSQLDATABASE') ?: getenv('railway') ?: 'railway';
+    $user = getenv('MYSQLUSER')     ?: getenv('root')     ?: 'root';
+    $pass = getenv('MYSQLPASSWORD') ?: getenv('NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
 
     echo "[DB] Konek: host={$host} port={$port} db={$db} user={$user}\n";
 

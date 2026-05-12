@@ -37,16 +37,16 @@ class Logic implements MessageComponentInterface {
     /*
      * Format per player:
      * [
-     *   'conn'        => ConnectionInterface,
-     *   'username'    => string,
-     *   'icon'        => string,
-     *   'isGuest'     => bool,
-     *   'score'       => int,
-     *   'reactionLog' => float[],
-     *   'combo'       => int,
-     *   'penalties'   => int,
-     *   'isReady'     => bool,
-     *   'findingMatch'=> bool,
+     * 'conn'        => ConnectionInterface,
+     * 'username'    => string,
+     * 'icon'        => string,
+     * 'isGuest'     => bool,
+     * 'score'       => int,
+     * 'reactionLog' => float[],
+     * 'combo'       => int,
+     * 'penalties'   => int,
+     * 'isReady'     => bool,
+     * 'findingMatch'=> bool,
      * ]
      */
 
@@ -60,13 +60,13 @@ class Logic implements MessageComponentInterface {
     /*
      * Format per item:
      * [
-     *   'id'       => string,
-     *   'type'     => 'good'|'bad'|'bonus',
-     *   'top'      => float,
-     *   'left'     => float,
-     *   'duration' => int (ms),
-     *   'spawnedAt'=> float (microtime*1000),
-     *   'round'    => int,
+     * 'id'       => string,
+     * 'type'     => 'good'|'bad'|'bonus',
+     * 'top'      => float,
+     * 'left'     => float,
+     * 'duration' => int (ms),
+     * 'spawnedAt'=> float (microtime*1000),
+     * 'round'    => int,
      * ]
      */
 
@@ -146,12 +146,13 @@ class Logic implements MessageComponentInterface {
             return;
         }
         $db = getDB();
-        if (!$db) { $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
+        if (!$db) { 
+            // PENAMBAHAN: Pesan error diperjelas
+            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'DB tidak tersedia. Cek Variabel Railway Anda!'])); 
+            return; 
+        }
       try {
-            // Perhatikan: Ada 2 parameter unik (:id_user dan :id_email)
             $stmt = $db->prepare("SELECT * FROM users WHERE username = :id_user OR email = :id_email LIMIT 1");
-            
-            // Perhatikan: Array memiliki 2 kunci yang cocok persis dengan yang di atas
             $stmt->execute([
                 ':id_user'  => $id, 
                 ':id_email' => $id
@@ -178,7 +179,8 @@ class Logic implements MessageComponentInterface {
 
         } catch (\PDOException $e) {
             echo "[DB ERR] Login: {$e->getMessage()}\n";
-            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error server.']));
+            // PENAMBAHAN: Mengirimkan error asli SQL ke web agar mudah melacak masalah
+            $conn->send($this->encode(['type'=>'AUTH_RESULT','success'=>false,'message'=>'Error Server: ' . $e->getMessage()]));
         }
     }
 
@@ -191,7 +193,11 @@ class Logic implements MessageComponentInterface {
             return;
         }
         $db = getDB();
-        if (!$db) { $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia.'])); return; }
+        if (!$db) { 
+            // PENAMBAHAN: Pesan error diperjelas
+            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'DB tidak tersedia. Cek Variabel Railway Anda!'])); 
+            return; 
+        }
         try {
             $stmt = $db->prepare("SELECT id FROM users WHERE username=:u OR (email!='' AND email=:e) LIMIT 1");
             $stmt->execute([':u'=>$username,':e'=>$email]);
@@ -199,15 +205,22 @@ class Logic implements MessageComponentInterface {
                 $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Username/email sudah dipakai.']));
                 return;
             }
+            
             $hash = password_hash($pass, PASSWORD_DEFAULT);
-            $db->prepare("INSERT INTO users (username,email,password_hash) VALUES (:u,:e,:p)")->execute([':u'=>$username,':e'=>$email,':p'=>$hash]);
+            
+            // PENAMBAHAN PENTING: Menyisipkan level, games_played, dan total_xp secara eksplisit ke database 
+            // untuk mencegah MySQL menolak pendaftaran akun jika ada settingan "Default" yang terlewat.
+            $db->prepare("INSERT INTO users (username, email, password_hash, level, games_played, total_xp) VALUES (:u, :e, :p, 1, 0, 0)")
+               ->execute([':u'=>$username, ':e'=>$email, ':p'=>$hash]);
+               
             $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>true,'user'=>[
                 'username'=>$username,'email'=>$email,'icon'=>'fa-user',
                 'level'=>1,'totalXP'=>0,'gamesPlayed'=>0,'bestTime'=>null,'type'=>'registered',
             ]]));
         } catch (\PDOException $e) {
             echo "[DB ERR] Register: {$e->getMessage()}\n";
-            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Error server.']));
+            // PENAMBAHAN: Mengirimkan pesan error asli SQL ke web
+            $conn->send($this->encode(['type'=>'REGISTER_RESULT','success'=>false,'message'=>'Error Database: ' . $e->getMessage()]));
         }
     }
 
@@ -222,19 +235,9 @@ class Logic implements MessageComponentInterface {
 
         if (!$username) return;
 
-        $this->players[] = [
-            'conn'=>$conn,
-            'username'=>$username,
-            'icon'=>$icon,
-            'isGuest'=>$isGuest,
-            'level'=>$level,
-            'score'=>0,
-            'reactionLog'=>[],
-            'combo'=>0,
-            'penalties'=>0,
-            'isReady'=>false,
-            'findingMatch'=>false,
-        ];
+        // PENAMBAHAN: Saya menghapus 1 blok kode ganda (duplicate) di bagian ini.
+        // Sebelumnya ada kodingan yang memasukkan pemain ke dalam list SEBELUM mengecek nama,
+        // yang menyebabkan bug ruang Lobby ter-reset/error. Sekarang sudah aman!
 
         foreach ($this->players as $p) {
             if (strtolower($p['username']) === strtolower($username)) {
