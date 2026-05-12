@@ -11,20 +11,22 @@ function getDB(): ?PDO {
 
     if ($pdo !== null) return $pdo;
 
-    // Railway env vars (prioritas) → fallback lokal
-    $host = getenv('MYSQLHOST')     ?: getenv('mainline.proxy.rlwy.net')     ?: 'mainline.proxy.rlwy.net';
-    $port = getenv('MYSQLPORT')     ?: getenv('46463')     ?: '46463';
-    $db   = getenv('MYSQLDATABASE') ?: getenv('railway') ?: 'railway';
-    $user = getenv('MYSQLUSER')     ?: getenv('root')     ?: 'root';
-    $pass = getenv('MYSQLPASSWORD') ?: getenv('NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV') ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
+    // 1. Coba ambil dari brankas Railway (Hanya berfungsi jika di-deploy di Railway)
+    $envHost = getenv('MYSQLHOST')     ?: getenv('MYSQL_HOST');
+    $envPort = getenv('MYSQLPORT')     ?: getenv('MYSQL_PORT');
+    $envDb   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE');
+    $envUser = getenv('MYSQLUSER')     ?: getenv('MYSQL_USER');
+    $envPass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD');
+
+    // 2. Jika brankas kosong (berarti sedang jalan di Localhost), gunakan data manual ini:
+    // Pastikan HOST dan PORT ini persis sama dengan tab "TCP Proxy" di Railway Anda!
+    $host = $envHost ?: 'mainline.proxy.rlwy.net';
+    $port = $envPort ?: '46463'; 
+    $db   = $envDb   ?: 'railway';
+    $user = $envUser ?: 'root';
+    $pass = $envPass ?: 'NCYdsxbJvSbepwCdcUnwUYkHnmdRcQmV';
 
     echo "[DB] Konek: host={$host} port={$port} db={$db} user={$user}\n";
-
-    // Deteksi apakah masih pakai localhost (env var belum terhubung)
-    if ($host === 'localhost') {
-        echo "[DB WARN] ⚠️ Host masih localhost — env var MySQL belum dihubungkan ke service ini!\n";
-        echo "[DB WARN] Buka Railway → project-game → Variables → Add Reference dari MySQL.\n";
-    }
 
     try {
         $pdo = new PDO(
@@ -34,7 +36,7 @@ function getDB(): ?PDO {
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
-                PDO::ATTR_TIMEOUT            => 10,
+                PDO::ATTR_TIMEOUT            => 10, // Timeout 10 detik agar tidak hang
             ]
         );
         echo "[DB] ✅ Koneksi berhasil! ({$db}@{$host}:{$port})\n";
