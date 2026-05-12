@@ -148,26 +148,30 @@ socket.onmessage = (event) => {
             break;
 
         // ── Auth (opsional — untuk migrasi auth ke WS) ────────
+        // ── Auth: Menerima jawaban dari Database/PHP ────────
         case 'AUTH_RESULT':
         case 'REGISTER_RESULT':
-            // Placeholder: saat ini auth masih via localStorage.
-            // Tangani di sini ketika migrasi auth ke WS dilakukan.
-            console.log("[WS] Auth result:", payload);
+            if (payload.success) {
+                // Jika database bilang sukses, baru simpan ke memori sementara & masuk game
+                AppState.user = payload.user;
+                AppState.isGuest = false;
+                AppState.isLoggedIn = true;
+                saveCurrentUser(AppState.user);
+                
+                // Kembalikan tombol seperti semula
+                if(els.btnLogin) { els.btnLogin.textContent = "MASUK"; els.btnLogin.disabled = false; }
+                if(els.btnRegister) { els.btnRegister.textContent = "CREATE NEW ACCOUNT"; els.btnRegister.disabled = false; }
+                
+                Auth.onSuccess();
+            } else {
+                // Jika database menolak, tampilkan error warna merah di layar
+                if (els.loginError) els.loginError.textContent = payload.message || "Gagal masuk/daftar.";
+                
+                // Kembalikan tombol seperti semula
+                if(els.btnLogin) { els.btnLogin.textContent = "MASUK"; els.btnLogin.disabled = false; }
+                if(els.btnRegister) { els.btnRegister.textContent = "CREATE NEW ACCOUNT"; els.btnRegister.disabled = false; }
+            }
             break;
-
-        // ── Leaderboard dari database server ──────────────────
-        case 'leaderboard_data':
-            UI.renderLeaderboardMini(payload.data);
-            break;
-
-        // ── Pesan sistem (disconnect, dll.) ───────────────────
-        case 'SYSTEM':
-            Chat.renderSystem(payload.message);
-            break;
-
-        default:
-            console.warn("[WS] Tipe pesan tidak dikenal:", payload.type);
-    }
 };
 
 socket.onclose = () => {
@@ -320,47 +324,45 @@ const Auth = {
         const id = els.idInput.value.trim();
         const pass = els.passInput.value;
         if (!id || !pass) { els.loginError.textContent = "Mohon isi Username/Email dan Password!"; return; }
-        const user = findUser(id);
-        if (user && user.password === pass) {
-            AppState.user = user;
-            AppState.isGuest = false;
-            AppState.isLoggedIn = true;
-            saveCurrentUser(AppState.user);
-            Auth.onSuccess();
+
+        // Ubah teks tombol jadi loading
+        els.btnLogin.textContent = "Memeriksa...";
+        els.btnLogin.disabled = true;
+
+        // Kirim data ke PHP Backend via WebSocket
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'AUTH_LOGIN', identifier: id, password: pass }));
         } else {
-            els.loginError.textContent = "Akun tidak ditemukan atau password salah.";
+            els.loginError.textContent = "Koneksi server terputus. Tunggu sebentar.";
+            els.btnLogin.textContent = "MASUK";
+            els.btnLogin.disabled = false;
         }
     },
     register: () => {
         const id = els.idInput.value.trim();
         const pass = els.passInput.value;
         if (!id || !pass) { els.loginError.textContent = "Mohon isi semua field!"; return; }
-        const existing = findUser(id);
-        if (existing) { els.loginError.textContent = "Username atau Email sudah terdaftar!"; return; }
+
         const isEmail = id.includes('@');
-        const displayUsername = isEmail ? id.split('@')[0] : id;
-        const newUser = {
-            username: displayUsername,
-            email: isEmail ? id : '',
-            password: pass,
-            level: 1,
-            icon: 'fa-user',
-            gamesPlayed: 0,
-            totalXP: 0,
-            bestTime: null
-        };
-        const users = getLocalStorageUsers();
-        users[displayUsername] = newUser;
-        saveLocalStorageUsers(users);
-        AppState.user = newUser;
-        AppState.isGuest = false;
-        AppState.isLoggedIn = true;
-        saveCurrentUser(AppState.user);
-        Auth.onSuccess();
+        const username = isEmail ? id.split('@')[0] : id;
+        const email = isEmail ? id : '';
+
+        // Ubah teks tombol jadi loading
+        els.btnRegister.textContent = "Mendaftar...";
+        els.btnRegister.disabled = true;
+
+        // Kirim data ke PHP Backend via WebSocket
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'AUTH_REGISTER', username: username, email: email, password: pass }));
+        } else {
+            els.loginError.textContent = "Koneksi server terputus.";
+            els.btnRegister.textContent = "CREATE NEW ACCOUNT";
+            els.btnRegister.disabled = false;
+        }
     },
     loginGuest: () => {
         const randomId = Math.floor(Math.random() * 10000);
-        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost' };
+        const guestUser = { username: `Guest_${randomId}`, type: 'guest', icon: 'fa-ghost', level: 1, totalXP: 0 };
         AppState.user = guestUser;
         AppState.isGuest = true;
         AppState.isLoggedIn = true;
@@ -374,7 +376,7 @@ const Auth = {
         UI.initIconPicker();
         UI.loadLobbyStats();
         UI.updateRoomUI();
-        Network.connect();
+        Network.connect(); // Ini akan otomatis mengirim JOIN ke server
     },
     checkSession: () => {
         const user = getCurrentUser();
@@ -382,18 +384,14 @@ const Auth = {
             AppState.user = user;
             AppState.isLoggedIn = true;
             AppState.isGuest = (user.type === 'guest');
-            showScreen('lobby');
-            UI.updateProfileUI();
-            UI.initIconPicker();
-            UI.loadLobbyStats();
-            UI.updateRoomUI();
-            Network.connect();
+            Auth.onSuccess(); // Langsung masuk lobby jika sudah ada session
         } else {
             showScreen('login');
         }
     },
     logout: () => {
         clearCurrentUser();
+        if (socket) socket.close();
         location.reload();
     }
 };
@@ -1554,3 +1552,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('sum-sessions')) Dashboard.init();
     else if (document.getElementById('login-screen')) Auth.checkSession();
 });
+}
