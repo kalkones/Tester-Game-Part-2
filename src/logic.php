@@ -74,7 +74,7 @@ class Logic implements MessageComponentInterface {
     // ── Ratchet Callbacks ─────────────────────────────────────
     public function onOpen(ConnectionInterface $conn): void {
         $this->clients->attach($conn);
-        echo "[OPEN]   #{$conn->resourceId}\n";
+        echo "[OPEN]   #" . spl_object_id($conn) . "\n";
 
         // Kirim status server saat koneksi baru masuk
         $conn->send($this->encode([
@@ -89,7 +89,7 @@ class Logic implements MessageComponentInterface {
         $data = json_decode($msg, true);
         if (!$data || !isset($data['type'])) return;
 
-        echo "[MSG]    #{$from->resourceId} → {$data['type']}\n";
+        echo "[MSG]    #" . spl_object_id($from) . " → {$data['type']}\n";
 
         switch ($data['type']) {
 
@@ -123,7 +123,7 @@ class Logic implements MessageComponentInterface {
 
     public function onClose(ConnectionInterface $conn): void {
         $this->clients->detach($conn);
-        $username = $this->getUsernameByConn($conn) ?? "#{$conn->resourceId}";
+        $username = $this->getUsernameByConn($conn) ?? '#' . spl_object_id($conn);
 
         // Bersihkan room & spectator sebelum hapus player
         $this->removeFromRoom($conn);
@@ -142,7 +142,7 @@ class Logic implements MessageComponentInterface {
     }
 
     public function onError(ConnectionInterface $conn, \Exception $e): void {
-        echo "[ERROR]  #{$conn->resourceId}: {$e->getMessage()}\n";
+        echo "[ERROR]  #" . spl_object_id($conn) . ": {$e->getMessage()}\n";
         $conn->close();
     }
 
